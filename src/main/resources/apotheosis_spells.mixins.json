@@ -11,7 +11,6 @@
         "SyncMixin",
         "InscribeMixin",
         "TooltipUtilsMixin",
-        "SlotOnTakeMixin",
         "MagicManagerMixin",
         "SalvagingMenuMixin",
         "AoeScaleMixin",
@@ -24,8 +23,7 @@
     ],
     "client": [
         "SpellWheelMixin",
-        "InscriptionTableScreenMixin",
-        "SpellDataMixin"
+        "InscriptionTableScreenMixin"
     ],
     "server": []
 }

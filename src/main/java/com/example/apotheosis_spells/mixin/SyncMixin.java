@@ -7,7 +7,6 @@ import dev.shadowsoffire.apotheosis.adventure.affix.AffixInstance;
 import dev.shadowsoffire.apotheosis.adventure.loot.LootRarity;
 import dev.shadowsoffire.placebo.reload.DynamicHolder;
 import io.redspace.ironsspellbooks.item.Scroll;
-import io.redspace.ironsspellbooks.item.SpellBook;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -20,16 +19,14 @@ import java.util.Map;
 public class SyncMixin {
 
     /**
-     * setAffixes 后重算 SpellContainer 内每个 SpellSlot 的 ReforgeCache。
-     * 覆盖 Scroll 和 SpellBook。
+     * setAffixes 后重算 Scroll 的 ReforgeCache 缓存。
+     * SpellBook 整体不在这里重铸 —— 属性路径走 BookAttributeHandler (每 10 tick 实时重建)。
      */
     @Inject(method = "setAffixes", at = @At("RETURN"))
     private static void onSetAffixes(ItemStack stack, Map<DynamicHolder<? extends Affix>, AffixInstance> affixes, CallbackInfo ci) {
         if (stack.isEmpty()) return;
         if (stack.getItem() instanceof Scroll) {
             ReforgeCache.sync(stack);
-        } else if (stack.getItem() instanceof SpellBook) {
-            // 不重铸整体 SpellBook
         }
     }
 

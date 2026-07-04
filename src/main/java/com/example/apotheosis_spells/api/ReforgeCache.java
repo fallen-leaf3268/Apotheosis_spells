@@ -7,9 +7,6 @@ import dev.shadowsoffire.apotheosis.adventure.affix.AffixRegistry;
 import dev.shadowsoffire.apotheosis.adventure.loot.LootCategory;
 import dev.shadowsoffire.apotheosis.adventure.loot.LootRarity;
 import dev.shadowsoffire.apotheosis.adventure.loot.RarityRegistry;
-import dev.shadowsoffire.apotheosis.adventure.socket.SocketHelper;
-import dev.shadowsoffire.apotheosis.adventure.socket.gem.Gem;
-import dev.shadowsoffire.apotheosis.adventure.socket.gem.bonus.GemBonus;
 import dev.shadowsoffire.placebo.reload.DynamicHolder;
 import io.redspace.ironsspellbooks.api.spells.ISpellContainer;
 import io.redspace.ironsspellbooks.api.spells.SpellData;
@@ -21,9 +18,6 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-
-import java.lang.reflect.Field;
-import java.util.Map;
 
 /**
  * 重铸数据缓存层。
@@ -554,57 +548,5 @@ public class ReforgeCache {
     public static void rebuildAffixesToScroll(ItemStack scroll, CompoundTag affixData) {
         if (scroll.isEmpty() || affixData == null || affixData.isEmpty()) return;
         scroll.addTagElement(AffixHelper.AFFIX_DATA, affixData.copy());
-    }
-
-    // ============================ SpellData 等级临时修改 ============================
-
-    private static final Field SPELL_LEVEL_FIELD;
-
-    static {
-        Field f = null;
-        try {
-            f = SpellData.class.getDeclaredField("spellLevel");
-            f.setAccessible(true);
-        } catch (Exception e) {
-            ApotheosisSpells.LOGGER.error("[ReforgeCache] 反射获取 spellLevel 字段失败: {}", e.toString());
-        }
-        SPELL_LEVEL_FIELD = f;
-    }
-
-    /**
-     * 临时修改 SpellData 的 spellLevel 字段（直接修改字段，不走 mixin）。
-     *
-     * 为什么需要这个：ISpellContainer.get(stack) 每次反序列化 NBT 都创建新的 SpellData 实例，
-     * SpellDataMixin.getLevel 注入点的 self 和 ctx.spellData 永远不是同一实例，
-     * identity check（==）必然失败。
-     *
-     * 替代方案：直接修改 spellData.spellLevel 字段本身。
-     * SpellData.getLevel() 返回 this.spellLevel，字段改了所有 getLevel() 调用都生效。
-     * 修改范围严格限于 entry mixin 设置的 spellData 实例 + 它在 formatScrollTooltip 等
-     * 内部调用的"同一批"实例。
-     *
-     * 必须在 finally/onExit 中恢复原值，否则 spellData 实例会被污染。
-     *
-     * @return 原 spellLevel，用于 onExit 恢复；-1 表示反射失败
-     */
-    public static int boostLevel(SpellData spellData, int addLevel) {
-        if (SPELL_LEVEL_FIELD == null || spellData == null || addLevel == 0) return -1;
-        try {
-            int original = spellData.getLevel();
-            SPELL_LEVEL_FIELD.setInt(spellData, original + addLevel);
-            return original;
-        } catch (Exception e) {
-            return -1;
-        }
-    }
-
-    public static boolean restoreLevel(SpellData spellData, int originalLevel) {
-        if (SPELL_LEVEL_FIELD == null || spellData == null || originalLevel < 0) return false;
-        try {
-            SPELL_LEVEL_FIELD.setInt(spellData, originalLevel);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
     }
 }

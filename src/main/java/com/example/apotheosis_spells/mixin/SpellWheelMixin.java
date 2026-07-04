@@ -4,6 +4,7 @@ import com.example.apotheosis_spells.api.ReforgeCache;
 import com.example.apotheosis_spells.handler.SpellCastHooks;
 import io.redspace.ironsspellbooks.api.magic.SpellSelectionManager;
 import io.redspace.ironsspellbooks.api.spells.AbstractSpell;
+import io.redspace.ironsspellbooks.api.spells.SpellData;
 import io.redspace.ironsspellbooks.api.spells.SpellSlot;
 import io.redspace.ironsspellbooks.gui.overlays.SpellWheelOverlay;
 import net.minecraft.client.Minecraft;
