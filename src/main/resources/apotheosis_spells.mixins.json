@@ -1,0 +1,31 @@
+{
+    "required": true, "minVersion": "0.8.5", "compatibilityLevel": "JAVA_17",
+    "package": "com.example.apotheosis_spells.mixin", "refmap": "apotheosis_spells.refmap.json",
+    "mixins": [
+        "RegMixin",
+        "LootControllerMixin",
+        "LootRarityRulesMixin",
+        "SlotMixin",
+        "ReforgeMixin",
+        "CastMixin",
+        "SyncMixin",
+        "InscribeMixin",
+        "TooltipUtilsMixin",
+        "SlotOnTakeMixin",
+        "MagicManagerMixin",
+        "SalvagingMenuMixin",
+        "AoeScaleMixin",
+        "SpellRadiusFloatMixin",
+        "SpellRadiusIntMixin",
+        "SpellRangeFloatMixin",
+        "SpellRangeStaticMixin",
+        "SpellRangeStatic1ArgMixin",
+        "SpellRecastMixin"
+    ],
+    "client": [
+        "SpellWheelMixin",
+        "InscriptionTableScreenMixin",
+        "SpellDataMixin"
+    ],
+    "server": []
+}
