@@ -1,43 +1,37 @@
 package com.example.apotheosis_spells.mixin;
 
 import com.example.apotheosis_spells.api.ReforgeCache;
-import dev.shadowsoffire.apotheosis.adventure.affix.Affix;
-import dev.shadowsoffire.apotheosis.adventure.affix.AffixHelper;
-import dev.shadowsoffire.apotheosis.adventure.affix.AffixInstance;
-import dev.shadowsoffire.apotheosis.adventure.loot.LootRarity;
-import dev.shadowsoffire.placebo.reload.DynamicHolder;
-import io.redspace.ironsspellbooks.item.Scroll;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.mojang.serialization.Codec;
+import io.redspace.ironsspellbooks.api.backwards_compat.CodecHelper;
+import io.redspace.ironsspellbooks.api.spells.ISpellContainer;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.util.Map;
-
-@Mixin(value = AffixHelper.class, remap = false)
+@Mixin(value = CodecHelper.class, remap = false)
 public class SyncMixin {
 
-    /**
-     * setAffixes 后重算 Scroll 的 ReforgeCache 缓存。
-     * SpellBook 整体不在这里重铸 —— 属性路径走 BookAttributeHandler (每 10 tick 实时重建)。
-     */
-    @Inject(method = "setAffixes", at = @At("RETURN"))
-    private static void onSetAffixes(ItemStack stack, Map<DynamicHolder<? extends Affix>, AffixInstance> affixes, CallbackInfo ci) {
-        if (stack.isEmpty()) return;
-        if (stack.getItem() instanceof Scroll) {
-            ReforgeCache.sync(stack);
+    @Inject(method = "getWithLegacy", at = @At("HEAD"), require = 1)
+    private static <T> void apothSpells$preserveLegacyAffixes(Codec<T> codec, ItemStack stack, String key,
+            String legacyKey, Codec<T> legacyCodec, CallbackInfoReturnable<T> cir) {
+        if (ISpellContainer.NBT.equals(key) && ISpellContainer.LEGACY_NBT.equals(legacyKey)) {
+            ReforgeCache.preserveLegacyAffixes(stack);
         }
     }
 
-    /**
-     * setRarity 后重算（强化台改 rarity 时触发）。
-     */
-    @Inject(method = "setRarity", at = @At("RETURN"))
-    private static void onSetRarity(ItemStack stack, LootRarity rarity, CallbackInfo ci) {
-        if (stack.isEmpty()) return;
-        if (stack.getItem() instanceof Scroll) {
-            ReforgeCache.sync(stack);
+    @WrapMethod(method = "set(Lnet/minecraft/world/item/ItemStack;Ljava/lang/String;Lcom/mojang/serialization/Codec;Ljava/lang/Object;)V")
+    private static <T> void apothSpells$preserveSpellAffixes(ItemStack stack, String key, Codec<T> codec, T value,
+                                                             Operation<Void> original) {
+        boolean spellContainer = ISpellContainer.NBT.equals(key);
+        if (spellContainer) ReforgeCache.sync(stack);
+        try {
+            original.call(stack, key, codec, value);
+        } finally {
+            if (spellContainer) ReforgeCache.sync(stack);
         }
     }
 }

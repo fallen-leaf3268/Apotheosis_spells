@@ -27,13 +27,34 @@ logoFile = ""
 [[dependencies.${mod_id}]]
     modId = "apotheosis"
     mandatory = true
-    versionRange = "[0,)"
+    versionRange = "${apotheosis_version_range}"
     ordering = "AFTER"
     side = "BOTH"
 
 [[dependencies.${mod_id}]]
     modId = "irons_spellbooks"
     mandatory = true
-    versionRange = "[0,)"
+    versionRange = "${ironsspells_version_range}"
+    ordering = "AFTER"
+    side = "BOTH"
+
+[[dependencies.${mod_id}]]
+    modId = "placebo"
+    mandatory = true
+    versionRange = "${placebo_version_range}"
+    ordering = "AFTER"
+    side = "BOTH"
+
+[[dependencies.${mod_id}]]
+    modId = "attributeslib"
+    mandatory = true
+    versionRange = "${attributeslib_version_range}"
+    ordering = "AFTER"
+    side = "BOTH"
+
+[[dependencies.${mod_id}]]
+    modId = "curios"
+    mandatory = true
+    versionRange = "${curios_version_range}"
     ordering = "AFTER"
     side = "BOTH"

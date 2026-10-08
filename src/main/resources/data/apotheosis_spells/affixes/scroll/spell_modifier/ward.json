@@ -2,36 +2,12 @@
   "type": "apotheosis_spells:ward",
   "modifier": "ward",
   "values": {
-    "common": {
-      "min": 2,
-      "steps": 0,
-      "step": 0
-    },
-    "uncommon": {
-      "min": 3,
-      "steps": 0,
-      "step": 0
-    },
-    "rare": {
-      "min": 4,
-      "steps": 0,
-      "step": 0
-    },
-    "epic": {
-      "min": 6,
-      "steps": 0,
-      "step": 0
-    },
-    "mythic": {
-      "min": 8,
-      "steps": 0,
-      "step": 0
-    },
-    "ancient": {
-      "min": 8,
-      "steps": 0,
-      "step": 0
-    }
+    "common": 2,
+    "uncommon": 3,
+    "rare": 4,
+    "epic": 6,
+    "mythic": 8,
+    "ancient": 8
   },
   "types": [
     "apotheosis_spells:scroll"

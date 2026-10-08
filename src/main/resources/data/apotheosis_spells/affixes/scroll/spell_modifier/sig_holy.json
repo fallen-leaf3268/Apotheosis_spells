@@ -2,37 +2,14 @@
   "type": "apotheosis_spells:school_signature",
   "modifier": "sig_holy",
   "school": "holy",
+  "action": "undead_damage",
   "values": {
-    "common": {
-      "min": 20,
-      "steps": 0,
-      "step": 0
-    },
-    "uncommon": {
-      "min": 30,
-      "steps": 0,
-      "step": 0
-    },
-    "rare": {
-      "min": 40,
-      "steps": 0,
-      "step": 0
-    },
-    "epic": {
-      "min": 55,
-      "steps": 0,
-      "step": 0
-    },
-    "mythic": {
-      "min": 75,
-      "steps": 0,
-      "step": 0
-    },
-    "ancient": {
-      "min": 75,
-      "steps": 0,
-      "step": 0
-    }
+    "common": 5,
+    "uncommon": 10,
+    "rare": 20,
+    "epic": 35,
+    "mythic": 50,
+    "ancient": 50
   },
   "types": [
     "apotheosis_spells:scroll"

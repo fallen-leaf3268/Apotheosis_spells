@@ -17,11 +17,11 @@ public class SpellLevelAffix extends SpellAffix {
             Codec.STRING.listOf().xmap(Set::copyOf, s -> s.stream().toList()).fieldOf("types").forGetter(a -> a.types)
     ).apply(i, SpellLevelAffix::new));
 
-    public SpellLevelAffix(String m, Map<String, Fn> v, Set<String> t) { super(m, v, t, AffixType.POTION); }
+    public SpellLevelAffix(String m, Map<String, Fn> v, Set<String> t) { super(m, v, t, AffixType.ABILITY); }
 
     @Override
     public ReforgeCache.Data contribute(int baseValue) {
-        return new ReforgeCache.Data(1, 1, 1, 1, baseValue, 1, 1, 0);
+        return new ReforgeCache.Data(1, 1, 1, 1, baseValue, 1, 1);
     }
 
     @Override

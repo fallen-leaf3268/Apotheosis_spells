@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import com.example.apotheosis_spells.ApotheosisSpells;
 import dev.shadowsoffire.apotheosis.adventure.affix.AffixHelper;
 import dev.shadowsoffire.apotheosis.adventure.affix.salvaging.SalvagingRecipe;
 import dev.shadowsoffire.apotheosis.adventure.loot.LootRarity;
@@ -37,8 +38,9 @@ public final class ScrollSalvage {
 
     private ScrollSalvage() {}
 
-    private static final ResourceLocation DYN_ID = new ResourceLocation("apotheosis_spells", "scroll_salvage_dynamic");
+    private static final ResourceLocation DYN_ID = ResourceLocation.fromNamespaceAndPath("apotheosis_spells", "scroll_salvage_dynamic");
     private static Constructor<SalvagingRecipe.OutputData> OUTPUT_CTOR;
+    private static boolean outputConstructorFailed;
 
     /** 卷轴 → 合成回收配方；非卷轴返回 null（交回 Apotheosis 原逻辑）。 */
     public static SalvagingRecipe recipeFor(ItemStack stack) {
@@ -51,8 +53,8 @@ public final class ScrollSalvage {
             SpellRarity sr = sd.getSpell().getRarity(sd.getLevel());
             // 墨水 0–1：一瓶墨水即可制作一张卷轴，回收给 50% 概率返还 1 个墨水（平衡，避免无损循环）。
             if (sr != null) addOut(outs, item("irons_spellbooks", sr.name().toLowerCase(Locale.ROOT) + "_ink"), 0, 1);
-        } catch (Exception ignored) {
-            // 卷轴异常/无法术时跳过墨水，保留纸+材料
+        } catch (Exception e) {
+            ApotheosisSpells.LOGGER.debug("[ScrollSalvage] spell data read failed, skip ink", e);
         }
 
         // —— 纸 0–1（同墨水，50% 返还 1 张）——
@@ -76,13 +78,14 @@ public final class ScrollSalvage {
     }
 
     private static Item item(String namespace, String path) {
-        Item i = ForgeRegistries.ITEMS.getValue(new ResourceLocation(namespace, path));
+        Item i = ForgeRegistries.ITEMS.getValue(ResourceLocation.fromNamespaceAndPath(namespace, path));
         return (i == null || i == Items.AIR) ? null : i;
     }
 
     /** OutputData 的构造器是包级私有，跨包用反射构造（运行期有效，编译期不直接引用构造器）。 */
     @SuppressWarnings("unchecked")
     private static SalvagingRecipe.OutputData makeOutput(ItemStack stack, int min, int max) {
+        if (outputConstructorFailed) return null;
         try {
             if (OUTPUT_CTOR == null) {
                 OUTPUT_CTOR = (Constructor<SalvagingRecipe.OutputData>) SalvagingRecipe.OutputData.class
@@ -91,6 +94,8 @@ public final class ScrollSalvage {
             }
             return OUTPUT_CTOR.newInstance(stack, min, max);
         } catch (Throwable t) {
+            outputConstructorFailed = true;
+            ApotheosisSpells.LOGGER.error("[ScrollSalvage] failed to construct salvage output", t);
             return null;
         }
     }

@@ -33,7 +33,16 @@ public abstract class SpellGemBonus extends GemBonus {
 
     @Override
     public boolean supports(LootRarity rarity) {
-        return true;
+        return switch (rarityKey(rarity)) {
+            case "common", "uncommon", "rare", "epic", "mythic", "ancient" -> true;
+            default -> false;
+        };
+    }
+
+    protected static String rarityKey(LootRarity rarity) {
+        if (rarity == null) return "";
+        ResourceLocation key = dev.shadowsoffire.apotheosis.adventure.loot.RarityRegistry.INSTANCE.getKey(rarity);
+        return key == null ? "" : key.getPath();
     }
 
     @Override

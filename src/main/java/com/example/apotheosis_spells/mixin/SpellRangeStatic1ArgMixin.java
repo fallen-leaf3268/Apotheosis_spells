@@ -17,6 +17,8 @@ public class SpellRangeStatic1ArgMixin {
     private static void apoth_scaleRange(int spellLevel, CallbackInfoReturnable<Float> cir) {
         var ctx = SpellCastHooks.get();
         if (ctx == null || ctx.data() == null || ctx.data().radius() == 1f) return;
+        if (ctx.spellData() == null
+                || !"irons_spellbooks:ray_of_siphoning".equals(ctx.spellData().getSpell().getSpellId())) return;
         cir.setReturnValue(cir.getReturnValueF() * ctx.data().radius());
     }
 }

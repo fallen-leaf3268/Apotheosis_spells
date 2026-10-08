@@ -14,6 +14,8 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
+jarJar.enable()
+
 minecraft {
     mappings channel: mapping_channel, version: mapping_version
     copyIdeResources = true
@@ -35,6 +37,13 @@ minecraft {
             mods { "${mod_id}" { source sourceSets.main } }
         }
 
+        gameTestServer {
+            workingDirectory project.file('build/gametest-run')
+            property 'forge.enabledGameTestNamespaces', mod_id
+            property 'forge.logging.console.level', 'info'
+            mods { "${mod_id}" { source sourceSets.main; source sourceSets.test } }
+        }
+
         data {
             workingDirectory project.file('run')
             property 'forge.logging.markers', 'REGISTRIES'
@@ -46,26 +55,72 @@ minecraft {
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
+sourceSets.test.resources { srcDir 'build/gametest-resources' }
 
 repositories {
-    flatDir { dir 'libs' }
+    mavenCentral {
+        content {
+            excludeGroup 'net.minecraft'
+            excludeGroup 'net.minecraftforge'
+            excludeGroup 'de.oceanlabs.mcp'
+            excludeGroupByRegex 'org\\.parchmentmc(\\..*)?'
+        }
+    }
+    flatDir {
+        dir 'libs'
+        content { includeGroup 'libs' }
+    }
+    maven {
+        url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
+        content { includeGroup 'software.bernie.geckolib' }
+    }
+    maven {
+        url = 'https://maven.kosmx.dev/'
+        content { includeGroup 'dev.kosmx.player-anim' }
+    }
+    maven {
+        url = 'https://code.redspace.io/releases'
+        content { includeGroup 'io.redspace' }
+    }
 }
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     annotationProcessor "org.spongepowered:mixin:${mixin_version}:processor"
+    compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${mixinextras_version}"))
+    implementation(jarJar("io.github.llamalad7:mixinextras-forge:${mixinextras_version}")) {
+        jarJar.ranged(it, "[${mixinextras_version},)")
+    }
 
-    // 全部从 libs 文件夹加载（手动放置 JAR）
-    compileOnly fg.deobf("libs:apotheosis:${libs_version}")
-    compileOnly fg.deobf("libs:placebo:${libs_version}")
-    compileOnly fg.deobf("libs:attributeslib:${libs_version}")
-    compileOnly fg.deobf("libs:curios:${libs_version}")
-    compileOnly fg.deobf("libs:ironsspells:${libs_version}")
+    implementation fg.deobf("libs:apotheosis:${libs_version}")
+    implementation fg.deobf("libs:placebo:${libs_version}")
+    implementation fg.deobf("libs:attributeslib:${libs_version}")
+    implementation fg.deobf("libs:curios:${libs_version}")
+    implementation fg.deobf("libs:ironsspells:${ironsspells_version}")
+
+    runtimeOnly fg.deobf("software.bernie.geckolib:geckolib-forge-${geckolib_version}")
+    runtimeOnly fg.deobf("dev.kosmx.player-anim:player-animation-lib-forge:${player_animator_version}")
+    runtimeOnly fg.deobf("io.redspace:irons_lib:${irons_lib_version}")
+
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testImplementation fg.deobf("software.bernie.geckolib:geckolib-forge-${geckolib_version}")
 }
 
 mixin {
     add sourceSets.main, 'apotheosis_spells.refmap.json'
     config 'apotheosis_spells.mixins.json'
+}
+
+if (providers.gradleProperty('fallenCompatTestDir').isPresent()) {
+    repositories.flatDir {
+        dirs providers.gradleProperty('fallenCompatTestDir').get()
+        content { includeGroup 'compat' }
+    }
+    dependencies {
+        runtimeOnly fg.deobf('compat:fallen_gems_affixes:1.20.1-2.1.1')
+        runtimeOnly fg.deobf('compat:fallen_lib:1.4.2-hf')
+    }
 }
 
 def resourceTargets = ['META-INF/mods.toml', 'pack.mcmeta']
@@ -74,7 +129,12 @@ def replaceProperties = [
     forge_version: forge_version, forge_version_range: forge_version_range,
     loader_version_range: loader_version_range,
     mod_id: mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version,
-    mod_authors: mod_authors, mod_description: mod_description
+    mod_authors: mod_authors, mod_description: mod_description,
+    apotheosis_version_range: apotheosis_version_range,
+    placebo_version_range: placebo_version_range,
+    attributeslib_version_range: attributeslib_version_range,
+    curios_version_range: curios_version_range,
+    ironsspells_version_range: ironsspells_version_range
 ]
 
 processResources {
@@ -104,6 +164,50 @@ jar {
 
 jar.finalizedBy('reobfJar')
 
+reobf {
+    jarJar {}
+}
+
+tasks.named('jar').configure {
+    archiveClassifier.set('slim')
+}
+
+tasks.named('jarJar').configure {
+    archiveClassifier.set('')
+    finalizedBy('reobfJarJar')
+}
+
+tasks.named('build').configure {
+    dependsOn('jarJar')
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+}
+
+tasks.register('prepareGameTestTemplate') {
+    def template = layout.buildDirectory.file('gametest-resources/data/apotheosis_spells/structures/empty.nbt')
+    outputs.file(template)
+    doLast {
+        def target = template.get().asFile
+        target.parentFile.mkdirs()
+        new DataOutputStream(new java.util.zip.GZIPOutputStream(new FileOutputStream(target))).withCloseable { data ->
+            data.writeByte(10); data.writeUTF('')
+            data.writeByte(3); data.writeUTF('DataVersion'); data.writeInt(3465)
+            data.writeByte(9); data.writeUTF('size'); data.writeByte(3); data.writeInt(3)
+            3.times { data.writeInt(3) }
+            data.writeByte(9); data.writeUTF('palette'); data.writeByte(10); data.writeInt(1)
+            data.writeByte(8); data.writeUTF('Name'); data.writeUTF('minecraft:air'); data.writeByte(0)
+            ['blocks', 'entities'].each { name ->
+                data.writeByte(9); data.writeUTF(name); data.writeByte(10); data.writeInt(0)
+            }
+            data.writeByte(0)
+        }
+    }
+}
+
+tasks.named('processTestResources').configure { dependsOn('prepareGameTestTemplate') }

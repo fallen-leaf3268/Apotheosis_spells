@@ -1,6 +1,7 @@
 package com.example.apotheosis_spells.gem;
 
 import dev.shadowsoffire.apotheosis.adventure.loot.LootRarity;
+import dev.shadowsoffire.apotheosis.adventure.socket.gem.GemInstance;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.HashMap;
@@ -23,15 +24,19 @@ public class GemRegistryHook {
     }
 
     public static SpellGemBonus getForGemStack(ItemStack gemStack, LootRarity rarity) {
-        if (gemStack.isEmpty()) return null;
-        var tag = gemStack.getTag();
-        if (tag == null) return null;
-        String gemId = tag.getString("gem");
-        if (gemId.isEmpty()) return null;
-        Supplier<? extends SpellGemBonus> f = FACTORIES.get(gemId);
-        if (f == null) return null;
-        SpellGemBonus b = f.get();
-        return b != null && b.supports(rarity) ? b : null;
+        ResolvedBonus resolved = resolve(gemStack);
+        return resolved == null ? null : resolved.bonus();
+    }
+
+    public static ResolvedBonus resolve(ItemStack gemStack) {
+        if (gemStack == null || gemStack.isEmpty()) return null;
+        GemInstance instance = GemInstance.unsocketed(gemStack);
+        if (!instance.isValidUnsocketed()) return null;
+        Supplier<? extends SpellGemBonus> factory = FACTORIES.get(instance.gem().getId().toString());
+        if (factory == null) return null;
+        SpellGemBonus bonus = factory.get();
+        LootRarity rarity = instance.rarity().get();
+        return bonus != null && bonus.supports(rarity) ? new ResolvedBonus(bonus, rarity) : null;
     }
 
     /**
@@ -43,6 +48,12 @@ public class GemRegistryHook {
     }
 
     public static Set<String> registeredIds() {
-        return FACTORIES.keySet();
+        return Set.copyOf(FACTORIES.keySet());
+    }
+
+    public record ResolvedBonus(SpellGemBonus bonus, LootRarity rarity) {
+        public com.example.apotheosis_spells.api.ReforgeCache.Data contribute() {
+            return bonus.contribute(rarity);
+        }
     }
 }

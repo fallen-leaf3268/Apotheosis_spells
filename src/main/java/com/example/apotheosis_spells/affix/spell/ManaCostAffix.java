@@ -17,13 +17,16 @@ public class ManaCostAffix extends SpellAffix {
             Codec.STRING.listOf().xmap(Set::copyOf, s -> s.stream().toList()).fieldOf("types").forGetter(a -> a.types)
     ).apply(i, ManaCostAffix::new));
 
-    public ManaCostAffix(String m, Map<String, Fn> v, Set<String> t) { super(m, v, t, AffixType.POTION); }
+    public ManaCostAffix(String m, Map<String, Fn> v, Set<String> t) { super(m, v, t, AffixType.ABILITY); }
 
     @Override
     public ReforgeCache.Data contribute(int baseValue) {
-        return new ReforgeCache.Data(1, Math.max(0.05f, 1f - baseValue / 100f), 1, 1, 0, 1, 1, 0);
+        return new ReforgeCache.Data(1, Math.max(0.05f, 1f - baseValue / 100f), 1, 1, 0, 1, 1);
     }
 
     @Override
     protected Codec<? extends SpellAffix> getSelfCodec() { return C; }
+
+    @Override
+    protected int displayValue(int value) { return Math.min(95, value); }
 }

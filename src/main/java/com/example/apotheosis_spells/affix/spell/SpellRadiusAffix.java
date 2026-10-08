@@ -5,6 +5,9 @@ import com.example.apotheosis_spells.affix.SpellAffix;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.shadowsoffire.apotheosis.adventure.affix.AffixType;
+import dev.shadowsoffire.apotheosis.adventure.loot.LootCategory;
+import dev.shadowsoffire.apotheosis.adventure.loot.LootRarity;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.Map;
 import java.util.Set;
@@ -17,11 +20,19 @@ public class SpellRadiusAffix extends SpellAffix {
             Codec.STRING.listOf().xmap(Set::copyOf, s -> s.stream().toList()).fieldOf("types").forGetter(a -> a.types)
     ).apply(i, SpellRadiusAffix::new));
 
-    public SpellRadiusAffix(String m, Map<String, Fn> v, Set<String> t) { super(m, v, t, AffixType.POTION); }
+    public SpellRadiusAffix(String m, Map<String, Fn> v, Set<String> t) { super(m, v, t, AffixType.ABILITY); }
+
+    @Override
+    public boolean canApplyTo(ItemStack stack, LootCategory cat, LootRarity rarity) {
+        return super.canApplyTo(stack, cat, rarity) && (stack.isEmpty() || supportsRadius(spellFrom(stack)));
+    }
+
+    @Override
+    protected boolean requiresSupportedSpell() { return true; }
 
     @Override
     public ReforgeCache.Data contribute(int baseValue) {
-        return new ReforgeCache.Data(1, 1, 1, 1, 0, 1f + baseValue / 100f, 1, 0);
+        return new ReforgeCache.Data(1, 1, 1, 1, 0, 1f + baseValue / 100f, 1);
     }
 
     @Override

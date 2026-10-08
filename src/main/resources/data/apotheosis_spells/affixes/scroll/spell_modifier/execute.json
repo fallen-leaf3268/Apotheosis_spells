@@ -1,6 +1,14 @@
 {
   "type": "apotheosis_spells:execute",
   "modifier": "execute",
+  "thresholds": {
+    "common": 25,
+    "uncommon": 30,
+    "rare": 35,
+    "epic": 40,
+    "mythic": 45,
+    "ancient": 50
+  },
   "values": {
     "common": {
       "min": 10,

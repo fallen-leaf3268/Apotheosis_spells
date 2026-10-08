@@ -1,37 +1,80 @@
 {
   "type": "apotheosis_spells:postcast_effect",
   "effect": "minecraft:regeneration",
-  "duration": 100,
   "values": {
     "common": {
-      "min": 1,
-      "steps": 0,
-      "step": 0
+      "amplifier": 0,
+      "duration": {
+        "min": 100,
+        "steps": 1,
+        "step": 20
+      },
+      "chance": 1
     },
     "uncommon": {
-      "min": 1,
-      "steps": 0,
-      "step": 0
+      "amplifier": {
+        "min": 0,
+        "steps": 1,
+        "step": 1
+      },
+      "duration": {
+        "min": 100,
+        "steps": 2,
+        "step": 20
+      },
+      "chance": 1
     },
     "rare": {
-      "min": 2,
-      "steps": 0,
-      "step": 0
+      "amplifier": {
+        "min": 1,
+        "steps": 1,
+        "step": 1
+      },
+      "duration": {
+        "min": 100,
+        "steps": 3,
+        "step": 20
+      },
+      "chance": 1
     },
     "epic": {
-      "min": 2,
-      "steps": 0,
-      "step": 0
+      "amplifier": {
+        "min": 1,
+        "steps": 1,
+        "step": 1
+      },
+      "duration": {
+        "min": 120,
+        "steps": 3,
+        "step": 20
+      },
+      "chance": 1
     },
     "mythic": {
-      "min": 3,
-      "steps": 0,
-      "step": 0
+      "amplifier": {
+        "min": 2,
+        "steps": 1,
+        "step": 1
+      },
+      "duration": {
+        "min": 140,
+        "steps": 4,
+        "step": 20
+      },
+      "chance": 1
     },
     "ancient": {
-      "min": 3,
-      "steps": 0,
-      "step": 0
+      "amplifier": {
+        "min": 2,
+        "steps": 1,
+        "step": 1
+      },
+      "duration": {
+        "min": 160,
+        "steps": 4,
+        "step": 20
+      },
+      "chance": 1
     }
   },
   "types": [

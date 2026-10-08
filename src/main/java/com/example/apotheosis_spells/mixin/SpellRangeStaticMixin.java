@@ -22,6 +22,10 @@ public class SpellRangeStaticMixin {
     private static void apoth_scaleRange(int spellLevel, LivingEntity caster, CallbackInfoReturnable<Float> cir) {
         var ctx = SpellCastHooks.get();
         if (ctx == null || ctx.data() == null || ctx.data().radius() == 1f) return;
+        if (caster != null && ctx.caster() != null && caster != ctx.caster()) return;
+        if (ctx.spellData() == null || !java.util.Set.of("irons_spellbooks:ray_of_frost",
+                "irons_spellbooks:sonic_boom", "irons_spellbooks:eldritch_blast")
+                .contains(ctx.spellData().getSpell().getSpellId())) return;
         cir.setReturnValue(cir.getReturnValueF() * ctx.data().radius());
     }
 }

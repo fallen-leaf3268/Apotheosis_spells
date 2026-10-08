@@ -1,0 +1,83 @@
+{
+  "type": "apotheosis_spells:postcast_effect",
+  "effect": "minecraft:speed",
+  "values": {
+    "common": {
+      "amplifier": 0,
+      "duration": {
+        "min": 100,
+        "steps": 1,
+        "step": 20
+      },
+      "chance": 1
+    },
+    "uncommon": {
+      "amplifier": {
+        "min": 0,
+        "steps": 1,
+        "step": 1
+      },
+      "duration": {
+        "min": 100,
+        "steps": 2,
+        "step": 20
+      },
+      "chance": 1
+    },
+    "rare": {
+      "amplifier": {
+        "min": 1,
+        "steps": 1,
+        "step": 1
+      },
+      "duration": {
+        "min": 100,
+        "steps": 3,
+        "step": 20
+      },
+      "chance": 1
+    },
+    "epic": {
+      "amplifier": {
+        "min": 1,
+        "steps": 1,
+        "step": 1
+      },
+      "duration": {
+        "min": 120,
+        "steps": 3,
+        "step": 20
+      },
+      "chance": 1
+    },
+    "mythic": {
+      "amplifier": {
+        "min": 2,
+        "steps": 1,
+        "step": 1
+      },
+      "duration": {
+        "min": 140,
+        "steps": 4,
+        "step": 20
+      },
+      "chance": 1
+    },
+    "ancient": {
+      "amplifier": {
+        "min": 2,
+        "steps": 1,
+        "step": 1
+      },
+      "duration": {
+        "min": 160,
+        "steps": 4,
+        "step": 20
+      },
+      "chance": 1
+    }
+  },
+  "types": [
+    "apotheosis_spells:scroll"
+  ]
+}

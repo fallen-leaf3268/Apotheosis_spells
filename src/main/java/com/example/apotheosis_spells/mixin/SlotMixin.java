@@ -10,8 +10,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = FilteredSlot.class, remap = false)
 public class SlotMixin {
+
     @Inject(method = "m_5857_", at = @At("HEAD"), cancellable = true, remap = false)
     private void accept(ItemStack s, CallbackInfoReturnable<Boolean> cir) {
-        if (s.getItem() instanceof Scroll) cir.setReturnValue(true);
+        if (getClass().getName().equals("dev.shadowsoffire.apotheosis.adventure.affix.reforging.ReforgingMenu$1")
+            && s.getItem() instanceof Scroll) {
+            cir.setReturnValue(true);
+        }
     }
 }

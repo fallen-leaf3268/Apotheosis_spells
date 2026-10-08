@@ -1,9 +1,11 @@
 package com.example.apotheosis_spells.mixin;
 
-import com.example.apotheosis_spells.api.ReforgeCache;
 import com.example.apotheosis_spells.handler.SpellCastHooks;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import io.redspace.ironsspellbooks.api.spells.AbstractSpell;
-import io.redspace.ironsspellbooks.api.spells.SpellData;
+import io.redspace.ironsspellbooks.api.spells.ISpellContainer;
 import io.redspace.ironsspellbooks.api.spells.SpellSlot;
 import io.redspace.ironsspellbooks.gui.inscription_table.InscriptionTableMenu;
 import io.redspace.ironsspellbooks.gui.inscription_table.InscriptionTableScreen;
@@ -14,80 +16,51 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.lang.reflect.Field;
 import java.util.List;
 
 @Mixin(value = InscriptionTableScreen.class, remap = false)
 public class InscriptionTableScreenMixin {
 
-    private static final int SPELLBOOK_SLOT = 36 + 0;
+    @Shadow
+    private int selectedSpellIndex;
 
-    @Inject(method = "renderLorePage", at = @At("HEAD"))
-    private void onRenderLorePageHead(net.minecraft.client.gui.GuiGraphics guiHelper, float partialTick, int mouseX, int mouseY, CallbackInfo ci) {
-        SpellCastHooks.clear();
-        try {
-            InscriptionTableScreen self = (InscriptionTableScreen) (Object) this;
-            InscriptionTableMenu menu = (InscriptionTableMenu) self.getMenu();
-
-            Player player = Minecraft.getInstance().player;
-            if (player == null) return;
-
-            ItemStack bookStack = menu.slots.get(SPELLBOOK_SLOT).getItem();
-            if (bookStack.isEmpty() || !(bookStack.getItem() instanceof SpellBook)) return;
-
-            int selectedIndex = getSelectedSpellIndex(self);
-            if (selectedIndex < 0) return;
-
-            int physicalIndex = getPhysicalIndex(self, selectedIndex);
-            if (physicalIndex < 0) return;
-
-            ReforgeCache.Data data = ReforgeCache.getFromSpellBook(bookStack, physicalIndex);
-            SpellSlot spellSlot = getSpellSlot(self, selectedIndex);
-            if (spellSlot == null) return;
-
-            int spellLevel = spellSlot.getLevel();
-            SpellCastHooks.set(new SpellCastHooks.Context(bookStack, player, physicalIndex, spellLevel, data, spellSlot.spellData()));
-        } catch (Exception e) {
-            SpellCastHooks.clear();
+    @WrapMethod(method = "renderLorePage")
+    private void apoth_renderLorePage(net.minecraft.client.gui.GuiGraphics guiHelper, float partialTick,
+                                      int mouseX, int mouseY, Operation<Void> original) {
+        SpellCastHooks.Context context = apoth_context();
+        if (context == null) {
+            original.call(guiHelper, partialTick, mouseX, mouseY);
+            return;
         }
-    }
-
-    @Inject(method = "renderLorePage", at = @At("RETURN"))
-    private void onRenderLorePageReturn(net.minecraft.client.gui.GuiGraphics guiHelper, float partialTick, int mouseX, int mouseY, CallbackInfo ci) {
-        SpellCastHooks.clear();
-    }
-
-    @Redirect(method = "renderLorePage", at = @At(value = "INVOKE",
-            target = "Lio/redspace/ironsspellbooks/api/spells/AbstractSpell;getLevelFor(ILnet/minecraft/world/entity/LivingEntity;)I"))
-    private int redirectGetLevelFor(AbstractSpell spell, int level, LivingEntity caster) {
-        int result = spell.getLevelFor(level, caster);
-        var ctx = SpellCastHooks.get();
-        return (ctx != null && ctx.data() != null && ctx.data().lvl() > 0) ? result + ctx.data().lvl() : result;
+        try (var scope = SpellCastHooks.enter(context)) {
+            original.call(guiHelper, partialTick, mouseX, mouseY);
+        }
     }
 
     @Redirect(method = "renderLorePage", at = @At(value = "INVOKE",
             target = "Lio/redspace/ironsspellbooks/api/spells/SpellSlot;getLevel()I"))
-    private int apoth_boostDisplayLevel(SpellSlot slot) {
+    private int apoth_level(SpellSlot slot) {
         int base = slot.getLevel();
         var ctx = SpellCastHooks.get();
         return (ctx != null && ctx.data() != null && ctx.data().lvl() > 0) ? base + ctx.data().lvl() : base;
     }
 
-    @Redirect(method = "renderLorePage", at = @At(value = "INVOKE",
+    @WrapOperation(method = "renderLorePage", at = @At(value = "INVOKE",
             target = "Lio/redspace/ironsspellbooks/api/spells/AbstractSpell;getUniqueInfo(ILnet/minecraft/world/entity/LivingEntity;)Ljava/util/List;"))
-    private List<MutableComponent> redirectGetUniqueInfo(AbstractSpell spell, int spellLevel, LivingEntity caster) {
+    private List<MutableComponent> apoth_uniqueInfo(AbstractSpell spell, int spellLevel, LivingEntity caster,
+                                                    Operation<List<MutableComponent>> original) {
         LivingEntity c = caster != null ? caster : Minecraft.getInstance().player;
-        return spell.getUniqueInfo(spellLevel, c);
+        return original.call(spell, spellLevel, c);
     }
 
     @Redirect(method = "renderLorePage", at = @At(value = "INVOKE",
             target = "Lio/redspace/ironsspellbooks/api/spells/AbstractSpell;getManaCost(I)I"))
-    private int redirectGetManaCost(AbstractSpell spell, int level) {
+    private int apoth_manaCost(AbstractSpell spell, int level) {
         var ctx = SpellCastHooks.get();
         int base = spell.getManaCost(level);
         if (ctx == null || ctx.data() == null || ctx.data().mana() == 1f) return base;
@@ -96,7 +69,7 @@ public class InscriptionTableScreenMixin {
 
     @Redirect(method = "renderLorePage", at = @At(value = "INVOKE",
             target = "Lio/redspace/ironsspellbooks/api/spells/AbstractSpell;getSpellCooldown()I"))
-    private int redirectGetSpellCooldown(AbstractSpell spell) {
+    private int apoth_cooldown(AbstractSpell spell) {
         net.minecraft.client.player.LocalPlayer player = Minecraft.getInstance().player;
         if (player != null) {
             return io.redspace.ironsspellbooks.capabilities.magic.MagicManager.getEffectiveSpellCooldown(
@@ -110,7 +83,7 @@ public class InscriptionTableScreenMixin {
 
     @Redirect(method = "renderLorePage", at = @At(value = "INVOKE",
             target = "Lio/redspace/ironsspellbooks/api/spells/AbstractSpell;getEffectiveCastTime(ILnet/minecraft/world/entity/LivingEntity;)I"))
-    private int redirectGetEffectiveCastTime(AbstractSpell spell, int spellLevel, LivingEntity entity) {
+    private int apoth_castTime(AbstractSpell spell, int spellLevel, LivingEntity entity) {
         var ctx = SpellCastHooks.get();
         LivingEntity castEntity = entity != null ? entity : Minecraft.getInstance().player;
         int base = spell.getEffectiveCastTime(spellLevel, castEntity);
@@ -118,54 +91,20 @@ public class InscriptionTableScreenMixin {
         return Math.max(0, Math.round(base * ctx.data().cast()));
     }
 
-    @Redirect(method = "renderLorePage", at = @At(value = "INVOKE",
-            target = "Lio/redspace/ironsspellbooks/util/TooltipsUtils;getLevelComponenet(Lio/redspace/ironsspellbooks/api/spells/SpellData;Lnet/minecraft/world/entity/LivingEntity;)Lnet/minecraft/network/chat/MutableComponent;"))
-    private MutableComponent redirectGetLevelComponenet(SpellData spellData, LivingEntity caster) {
-        int stored = spellData.getLevel();
-        int level = spellData.getSpell().getLevelFor(stored, caster);
-        var ctx = SpellCastHooks.get();
-        int diff = (ctx != null && ctx.data() != null && ctx.data().lvl() > 0) ? ctx.data().lvl() : 0;
-        level += diff;
-        int diffFromStored = level - stored;
-        if (diffFromStored > 0) return net.minecraft.network.chat.Component.literal(level + " (+" + diffFromStored + ")");
-        if (diffFromStored < 0) return net.minecraft.network.chat.Component.literal(level + " (" + diffFromStored + ")");
-        return net.minecraft.network.chat.Component.literal(String.valueOf(level));
-    }
-
-    private static int getSelectedSpellIndex(InscriptionTableScreen screen) {
-        try {
-            Field field = screen.getClass().getDeclaredField("selectedSpellIndex");
-            field.setAccessible(true);
-            Object val = field.get(screen);
-            if (val instanceof Integer) return (Integer) val;
-        } catch (Exception ignored) {}
-        return -1;
-    }
-
-    private static int getPhysicalIndex(InscriptionTableScreen screen, int selectedIndex) {
-        try {
-            SpellSlot spellSlot = getSpellSlot(screen, selectedIndex);
-            if (spellSlot == null) return -1;
-            return spellSlot.index();
-        } catch (Exception e) {
-            return -1;
-        }
-    }
-
-    @SuppressWarnings("rawtypes")
-    private static SpellSlot getSpellSlot(InscriptionTableScreen screen, int selectedIndex) {
-        try {
-            Field spellSlotsField = screen.getClass().getDeclaredField("spellSlots");
-            spellSlotsField.setAccessible(true);
-            List spellSlots = (List) spellSlotsField.get(screen);
-            if (selectedIndex < 0 || selectedIndex >= spellSlots.size()) return null;
-
-            Object spellSlotInfo = spellSlots.get(selectedIndex);
-            Field spellSlotField = spellSlotInfo.getClass().getDeclaredField("spellSlot");
-            spellSlotField.setAccessible(true);
-            return (SpellSlot) spellSlotField.get(spellSlotInfo);
-        } catch (Exception e) {
-            return null;
-        }
+    @Unique
+    private SpellCastHooks.Context apoth_context() {
+        Player player = Minecraft.getInstance().player;
+        if (player == null || selectedSpellIndex < 0) return null;
+        InscriptionTableScreen screen = (InscriptionTableScreen) (Object) this;
+        InscriptionTableMenu menu = screen.getMenu();
+        ItemStack bookStack = menu.getSpellBookSlot().getItem();
+        if (bookStack.isEmpty() || !(bookStack.getItem() instanceof SpellBook)) return null;
+        ISpellContainer container = ISpellContainer.get(bookStack);
+        if (container == null) return null;
+        SpellSlot[] slots = container.getAllSpells();
+        if (selectedSpellIndex >= slots.length) return null;
+        SpellSlot spellSlot = slots[selectedSpellIndex];
+        if (spellSlot == null || spellSlot.spellData() == null || spellSlot.spellData().getSpell() == null) return null;
+        return SpellCastHooks.buildContext(bookStack, player, spellSlot.index(), spellSlot.getLevel(), spellSlot.spellData());
     }
 }

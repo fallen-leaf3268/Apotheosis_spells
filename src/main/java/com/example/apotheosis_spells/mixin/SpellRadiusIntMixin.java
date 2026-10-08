@@ -18,7 +18,8 @@ public class SpellRadiusIntMixin {
     @Inject(method = "getRadius", at = @At("RETURN"), cancellable = true)
     private void apoth_scaleRadius(int spellLevel, LivingEntity caster, CallbackInfoReturnable<Integer> cir) {
         var ctx = SpellCastHooks.get();
-        if (ctx == null || ctx.data() == null || ctx.data().radius() == 1f) return;
+        if (!SpellCastHooks.matches((io.redspace.ironsspellbooks.api.spells.AbstractSpell) (Object) this, caster)
+                || ctx.data().radius() == 1f) return;
         cir.setReturnValue(Math.max(0, Math.round(cir.getReturnValueI() * ctx.data().radius())));
     }
 }

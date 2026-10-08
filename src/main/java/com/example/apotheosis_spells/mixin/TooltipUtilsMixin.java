@@ -1,10 +1,13 @@
 package com.example.apotheosis_spells.mixin;
 
-import com.example.apotheosis_spells.api.ReforgeCache;
 import com.example.apotheosis_spells.handler.SpellCastHooks;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import io.redspace.ironsspellbooks.api.spells.AbstractSpell;
 import io.redspace.ironsspellbooks.api.spells.CastSource;
+import io.redspace.ironsspellbooks.api.spells.ISpellContainer;
 import io.redspace.ironsspellbooks.api.spells.SpellData;
+import io.redspace.ironsspellbooks.api.spells.SpellSlot;
 import io.redspace.ironsspellbooks.item.Scroll;
 import io.redspace.ironsspellbooks.item.SpellBook;
 import io.redspace.ironsspellbooks.util.TooltipsUtils;
@@ -13,94 +16,78 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.List;
 
 @Mixin(value = TooltipsUtils.class, remap = false)
 public class TooltipUtilsMixin {
 
-    @Inject(method = "formatScrollTooltip", at = @At("HEAD"))
-    private static void onEnterScrollTooltip(ItemStack stack, Player player,
-                                             CallbackInfoReturnable<List<net.minecraft.network.chat.Component>> cir) {
-        SpellCastHooks.clear();
-        if (stack == null || stack.isEmpty()) return;
-        if (!(stack.getItem() instanceof Scroll)) return;
-        if (!io.redspace.ironsspellbooks.api.spells.ISpellContainer.isSpellContainer(stack)) return;
-
-        ReforgeCache.Data data = ReforgeCache.getFromScroll(stack);
-        SpellData scrollSpellData = io.redspace.ironsspellbooks.api.spells.ISpellContainer.get(stack).getSpellAtIndex(0);
-        if (scrollSpellData == null || scrollSpellData.getSpell() == null) return;
-        SpellCastHooks.set(new SpellCastHooks.Context(stack, player, 0, scrollSpellData.getLevel(), data, scrollSpellData));
-    }
-
-    @Inject(method = "formatScrollTooltip", at = @At("RETURN"))
-    private static void onExitScrollTooltip(ItemStack stack, Player player,
-                                            CallbackInfoReturnable<List<net.minecraft.network.chat.Component>> cir) {
-        SpellCastHooks.clear();
-    }
-
-    @Inject(method = "formatActiveSpellTooltip", at = @At("HEAD"))
-    private static void onEnterActiveTooltip(ItemStack stack, SpellData spellData, CastSource castSource,
-                                             LocalPlayer player,
-                                             CallbackInfoReturnable<List<net.minecraft.network.chat.Component>> cir) {
-        SpellCastHooks.clear();
-        if (spellData == null || spellData == SpellData.EMPTY) return;
-
-        ItemStack bookStack = stack;
-        int slotIndex = -1;
-
-        if (bookStack == null || bookStack.isEmpty()) {
-            bookStack = io.redspace.ironsspellbooks.api.util.Utils.getPlayerSpellbookStack(player);
+    @Mixin(value = SpellBook.class, remap = false)
+    public static class BookPages {
+        @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "getPages", at = @At(value = "INVOKE",
+                target = "Ljava/util/stream/Stream;map(Ljava/util/function/Function;)Ljava/util/stream/Stream;"))
+        private java.util.stream.Stream<net.minecraft.network.chat.Component> apoth_pageContext(
+                java.util.stream.Stream<SpellSlot> slots,
+                java.util.function.Function<SpellSlot, net.minecraft.network.chat.Component> render,
+                Operation<java.util.stream.Stream<net.minecraft.network.chat.Component>> original,
+                @com.llamalad7.mixinextras.sugar.Local(argsOnly = true) ItemStack stack) {
+            java.util.function.Function<SpellSlot, net.minecraft.network.chat.Component> scoped = slot ->
+                    SpellCastHooks.withPageContext(stack, net.minecraft.client.Minecraft.getInstance().player, slot, render);
+            return original.call(slots, scoped);
         }
+    }
 
-        if (bookStack != null && !bookStack.isEmpty() && bookStack.getItem() instanceof SpellBook) {
-            slotIndex = ReforgeCache.resolveSelectedSpellIndex(bookStack, player);
+    @WrapMethod(method = "formatScrollTooltip")
+    private static List<net.minecraft.network.chat.Component> apoth_scrollTooltip(
+            ItemStack stack, Player player, Operation<List<net.minecraft.network.chat.Component>> original) {
+        SpellCastHooks.Context context = apoth_context(stack, null, player);
+        if (context == null) return original.call(stack, player);
+        try (var scope = SpellCastHooks.enter(context)) {
+            return original.call(stack, player);
         }
-
-        ReforgeCache.Data data = (bookStack != null && !bookStack.isEmpty())
-                ? ReforgeCache.resolveDataFromStack(bookStack, player)
-                : ReforgeCache.Data.DEF;
-        SpellCastHooks.set(new SpellCastHooks.Context(bookStack, player, slotIndex, spellData.getLevel(), data, spellData));
     }
 
-    @Inject(method = "formatActiveSpellTooltip", at = @At("RETURN"))
-    private static void onExitActiveTooltip(ItemStack stack, SpellData spellData, CastSource castSource,
-                                            LocalPlayer player,
-                                            CallbackInfoReturnable<List<net.minecraft.network.chat.Component>> cir) {
-        SpellCastHooks.clear();
+    @WrapMethod(method = "formatActiveSpellTooltip")
+    private static List<net.minecraft.network.chat.MutableComponent> apoth_activeTooltip(
+            ItemStack stack, SpellData spellData, CastSource castSource, LocalPlayer player,
+            Operation<List<net.minecraft.network.chat.MutableComponent>> original) {
+        SpellCastHooks.Context context = apoth_context(stack, spellData, player);
+        if (context == null) return original.call(stack, spellData, castSource, player);
+        try (var scope = SpellCastHooks.enter(context)) {
+            return original.call(stack, spellData, castSource, player);
+        }
     }
 
-    @Redirect(method = "formatScrollTooltip", at = @At(value = "INVOKE",
+    @Redirect(method = {"formatScrollTooltip", "formatActiveSpellTooltip"}, at = @At(value = "INVOKE",
             target = "Lio/redspace/ironsspellbooks/api/spells/AbstractSpell;getLevelFor(ILnet/minecraft/world/entity/LivingEntity;)I"))
-    private static int redirectGetLevelFor(AbstractSpell spell, int level, LivingEntity caster) {
+    private static int apoth_level(AbstractSpell spell, int level, LivingEntity caster) {
         int result = spell.getLevelFor(level, caster);
         var ctx = SpellCastHooks.get();
         return (ctx != null && ctx.data() != null && ctx.data().lvl() > 0) ? result + ctx.data().lvl() : result;
     }
 
-    @Redirect(method = "formatScrollTooltip", at = @At(value = "INVOKE",
-            target = "Lio/redspace/ironsspellbooks/api/spells/AbstractSpell;getSpellPower(ILnet/minecraft/world/entity/Entity;)F"))
-    private static float redirectGetSpellPower(AbstractSpell spell, int spellLevel, net.minecraft.world.entity.Entity source) {
-        // ×dmg 由 CastMixin.apoth_spellPower 全局施加，此处只取基础值
-        return spell.getSpellPower(spellLevel, source);
-    }
-
-    @Redirect(method = "formatScrollTooltip", at = @At(value = "INVOKE",
+    @Redirect(method = {"formatScrollTooltip", "formatActiveSpellTooltip"}, at = @At(value = "INVOKE",
             target = "Lio/redspace/ironsspellbooks/api/spells/AbstractSpell;getManaCost(I)I"))
-    private static int redirectGetManaCost(AbstractSpell spell, int level) {
+    private static int apoth_manaCost(AbstractSpell spell, int level) {
         int base = spell.getManaCost(level);
         var ctx = SpellCastHooks.get();
-        if (ctx == null || ctx.data() == null || ctx.data().mana() == 1f) return base;
-        return Math.max(0, Math.round(base * ctx.data().mana()));
+        float multiplier = ctx == null || ctx.data() == null ? 1 : ctx.data().mana();
+        int cost = Math.max(0, Math.round(base * multiplier));
+        boolean continuous = spell.getCastType() == io.redspace.ironsspellbooks.api.spells.CastType.CONTINUOUS;
+        com.example.apotheosis_spells.ApotheosisSpells.Diagnostics.calculation("MANA_TOOLTIP", spell.getSpellId(),
+                "level=" + level + " resolved=" + (ctx != null) + " physicalSlot=" + (ctx == null ? -1 : ctx.spellSlotIndex())
+                        + " basePerCast=" + base + " multiplier=" + multiplier + " costPerCast=" + cost
+                        + " displayed=" + (continuous ? cost * (20 / io.redspace.ironsspellbooks.capabilities.magic.MagicManager.CONTINUOUS_CAST_TICK_INTERVAL) : cost)
+                        + " unit=" + (continuous ? "per_second" : "per_cast"));
+        return cost;
     }
 
-    @Redirect(method = "formatScrollTooltip", at = @At(value = "INVOKE",
+    @Redirect(method = {"formatScrollTooltip", "formatActiveSpellTooltip"}, at = @At(value = "INVOKE",
             target = "Lio/redspace/ironsspellbooks/api/spells/AbstractSpell;getEffectiveCastTime(ILnet/minecraft/world/entity/LivingEntity;)I"))
-    private static int redirectGetEffectiveCastTime(AbstractSpell spell, int spellLevel, LivingEntity entity) {
+    private static int apoth_castTime(AbstractSpell spell, int spellLevel, LivingEntity entity) {
         int base = spell.getEffectiveCastTime(spellLevel, entity);
         var ctx = SpellCastHooks.get();
         if (ctx == null || ctx.data() == null || ctx.data().cast() == 1f) return base;
@@ -109,7 +96,7 @@ public class TooltipUtilsMixin {
 
     @Redirect(method = {"formatScrollTooltip", "getTitleComponent"}, at = @At(value = "INVOKE",
             target = "Lio/redspace/ironsspellbooks/util/TooltipsUtils;getLevelComponenet(Lio/redspace/ironsspellbooks/api/spells/SpellData;Lnet/minecraft/world/entity/LivingEntity;)Lnet/minecraft/network/chat/MutableComponent;"))
-    private static net.minecraft.network.chat.MutableComponent redirectGetLevelComponenet(SpellData spellData, LivingEntity caster) {
+    private static net.minecraft.network.chat.MutableComponent apoth_levelComponent(SpellData spellData, LivingEntity caster) {
         int stored = spellData.getLevel();
         int level = spellData.getSpell().getLevelFor(stored, caster);
         var ctx = SpellCastHooks.get();
@@ -121,35 +108,28 @@ public class TooltipUtilsMixin {
         return net.minecraft.network.chat.Component.literal(String.valueOf(level));
     }
 
-    @Redirect(method = "formatActiveSpellTooltip", at = @At(value = "INVOKE",
-            target = "Lio/redspace/ironsspellbooks/api/spells/AbstractSpell;getLevelFor(ILnet/minecraft/world/entity/LivingEntity;)I"))
-    private static int redirectActiveGetLevelFor(AbstractSpell spell, int level, LivingEntity caster) {
-        int result = spell.getLevelFor(level, caster);
-        var ctx = SpellCastHooks.get();
-        return (ctx != null && ctx.data() != null && ctx.data().lvl() > 0) ? result + ctx.data().lvl() : result;
-    }
-
-    @Redirect(method = "formatActiveSpellTooltip", at = @At(value = "INVOKE",
-            target = "Lio/redspace/ironsspellbooks/api/spells/AbstractSpell;getSpellPower(ILnet/minecraft/world/entity/Entity;)F"))
-    private static float redirectActiveGetSpellPower(AbstractSpell spell, int spellLevel, net.minecraft.world.entity.Entity source) {
-        return spell.getSpellPower(spellLevel, source);
-    }
-
-    @Redirect(method = "formatActiveSpellTooltip", at = @At(value = "INVOKE",
-            target = "Lio/redspace/ironsspellbooks/api/spells/AbstractSpell;getManaCost(I)I"))
-    private static int redirectActiveGetManaCost(AbstractSpell spell, int level) {
-        int base = spell.getManaCost(level);
-        var ctx = SpellCastHooks.get();
-        if (ctx == null || ctx.data() == null || ctx.data().mana() == 1f) return base;
-        return Math.max(0, Math.round(base * ctx.data().mana()));
-    }
-
-    @Redirect(method = "formatActiveSpellTooltip", at = @At(value = "INVOKE",
-            target = "Lio/redspace/ironsspellbooks/api/spells/AbstractSpell;getEffectiveCastTime(ILnet/minecraft/world/entity/LivingEntity;)I"))
-    private static int redirectActiveGetEffectiveCastTime(AbstractSpell spell, int spellLevel, LivingEntity entity) {
-        int base = spell.getEffectiveCastTime(spellLevel, entity);
-        var ctx = SpellCastHooks.get();
-        if (ctx == null || ctx.data() == null || ctx.data().cast() == 1f) return base;
-        return Math.max(0, Math.round(base * ctx.data().cast()));
+    @Unique
+    private static SpellCastHooks.Context apoth_context(ItemStack stack, SpellData spellData, Player player) {
+        ItemStack source = stack;
+        if (source == null || source.isEmpty() || !ISpellContainer.isSpellContainer(source)) return null;
+        if (source.getItem() instanceof Scroll) {
+            SpellData actual = ISpellContainer.get(source).getSpellAtIndex(0);
+            if (actual == null || actual == SpellData.EMPTY || actual.getSpell() == null) return null;
+            return SpellCastHooks.buildContext(source, player, 0, actual.getLevel(), actual);
+        }
+        if (!(source.getItem() instanceof SpellBook) || spellData == null || spellData == SpellData.EMPTY) return null;
+        SpellSlot match = null;
+        for (SpellSlot slot : ISpellContainer.get(source).getActiveSpells()) {
+            SpellData actual = slot.spellData();
+            if (actual == spellData) {
+                return SpellCastHooks.buildContext(source, player, slot.index(), spellData.getLevel(), actual);
+            }
+            if (actual.equals(spellData)) {
+                if (match != null) return null;
+                match = slot;
+            }
+        }
+        return match == null ? null
+                : SpellCastHooks.buildContext(source, player, match.index(), spellData.getLevel(), match.spellData());
     }
 }

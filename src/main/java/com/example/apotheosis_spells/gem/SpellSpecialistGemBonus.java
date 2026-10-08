@@ -10,22 +10,22 @@ import net.minecraft.resources.ResourceLocation;
  */
 public class SpellSpecialistGemBonus extends SpellGemBonus {
     public SpellSpecialistGemBonus() {
-        super(new ResourceLocation("apotheosis_spells", "spell_specialist"), MageSlayerGemBonus.SCROLL_CLASS);
+        super(ResourceLocation.fromNamespaceAndPath("apotheosis_spells", "spell_specialist"), MageSlayerGemBonus.SCROLL_CLASS);
     }
 
     @Override
     public ReforgeCache.Data contribute(LootRarity rarity) {
         float dmg = 1, cd = 1, cast = 1, lvl = 0;
-        String key = dev.shadowsoffire.apotheosis.adventure.loot.RarityRegistry.INSTANCE.getKey(rarity).getPath();
+        String key = rarityKey(rarity);
         switch (key) {
             case "common" -> { dmg = 1.03f; cast = 0.95f; }
             case "uncommon" -> { dmg = 1.06f; cast = 0.92f; }
             case "rare" -> { dmg = 1.10f; cd = 0.95f; cast = 0.90f; }
             case "epic" -> { dmg = 1.15f; cd = 0.92f; cast = 0.85f; }
-            case "mythic" -> { dmg = 1.20f; cd = 0.88f; cast = 0.80f; lvl = 1; }
-            default -> { dmg = 1.10f; }
+            case "mythic", "ancient" -> { dmg = 1.20f; cd = 0.88f; cast = 0.80f; lvl = 1; }
+            default -> { return ReforgeCache.Data.DEF; }
         }
-        return new ReforgeCache.Data(dmg, 1, cd, cast, (int) lvl, 1, 1, 0);
+        return new ReforgeCache.Data(dmg, 1, cd, cast, (int) lvl, 1, 1);
     }
 
     @Override

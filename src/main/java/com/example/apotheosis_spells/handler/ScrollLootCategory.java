@@ -2,7 +2,6 @@ package com.example.apotheosis_spells.handler;
 
 import dev.shadowsoffire.apotheosis.adventure.loot.LootCategory;
 import io.redspace.ironsspellbooks.item.Scroll;
-import io.redspace.ironsspellbooks.item.SpellBook;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 

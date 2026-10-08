@@ -1,0 +1,255 @@
+package com.example.apotheosis_spells.handler;
+
+import com.example.apotheosis_spells.api.ReforgeCache;
+import io.redspace.ironsspellbooks.api.magic.MagicData;
+import io.redspace.ironsspellbooks.api.registry.AttributeRegistry;
+import io.redspace.ironsspellbooks.api.spells.ISpellContainer;
+import io.redspace.ironsspellbooks.api.util.Utils;
+import io.redspace.ironsspellbooks.gui.overlays.SpellSelection;
+import net.minecraft.gametest.framework.GameTest;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.TagParser;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.common.util.FakePlayerFactory;
+import net.minecraftforge.gametest.GameTestHolder;
+import net.minecraftforge.gametest.PrefixGameTestTemplate;
+import net.minecraftforge.registries.ForgeRegistries;
+
+import java.util.UUID;
+
+@GameTestHolder("apotheosis_spells")
+@PrefixGameTestTemplate(false)
+public class PreviewAttributeGameTests {
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void selectedGemAttributesDeactivateAndRecoverWithoutChangingBook(GameTestHelper helper) throws Exception {
+        var player = player(helper, "[SelectedGemRecovery]");
+        var book = book();
+        Utils.setPlayerSpellbookStack(player, book);
+        MagicData.getPlayerMagicData(player).getSyncedData().setSpellSelection(new SpellSelection("spellbook", 0));
+        var power = player.getAttributes().getInstance(AttributeRegistry.SPELL_POWER.get());
+        var mana = player.getAttributes().getInstance(AttributeRegistry.MAX_MANA.get());
+        var otherPower = new AttributeModifier(UUID.randomUUID(), "other power", 0.1, AttributeModifier.Operation.ADDITION);
+        var otherMana = new AttributeModifier(UUID.randomUUID(), "other mana", 20, AttributeModifier.Operation.ADDITION);
+        power.addTransientModifier(otherPower);
+        mana.addTransientModifier(otherMana);
+        double neutralPower = power.getValue();
+        double neutralMana = mana.getValue();
+        var original = book.getTag().copy();
+        var ordered = dev.shadowsoffire.apotheosis.adventure.loot.RarityRegistry.class.getDeclaredField("ordered");
+        ordered.setAccessible(true);
+        var registry = dev.shadowsoffire.apotheosis.adventure.loot.RarityRegistry.INSTANCE;
+        Object previousRarities = ordered.get(registry);
+        boolean previousAdventure = dev.shadowsoffire.apotheosis.Apotheosis.enableAdventure;
+        try {
+            dev.shadowsoffire.apotheosis.Apotheosis.enableAdventure = true;
+            BookAttributeHandler.refresh(player);
+            helper.assertTrue(near(power.getValue(), neutralPower + 0.05) && near(mana.getValue(), neutralMana + 120),
+                    "Selected gem fixture did not apply real attributes");
+            dev.shadowsoffire.apotheosis.Apotheosis.enableAdventure = false;
+            BookAttributeHandler.refresh(player);
+            helper.assertTrue(near(power.getValue(), neutralPower) && near(mana.getValue(), neutralMana)
+                            && power.getModifier(otherPower.getId()) != null && mana.getModifier(otherMana.getId()) != null,
+                    "Disabling adventure retained book bonuses or removed another source's modifiers");
+            helper.assertTrue(original.equals(book.getTag()), "Disabling adventure changed the stored gem data");
+            dev.shadowsoffire.apotheosis.Apotheosis.enableAdventure = true;
+            BookAttributeHandler.refresh(player);
+            helper.assertTrue(near(power.getValue(), neutralPower + 0.05) && near(mana.getValue(), neutralMana + 120),
+                    "Re-enabling adventure did not restore selected gem attributes");
+            ordered.set(registry, java.util.List.of());
+            BookAttributeHandler.refresh(player);
+            helper.assertTrue(near(power.getValue(), neutralPower) && near(mana.getValue(), neutralMana),
+                    "Unavailable rarities left the cached selected gem attributes active");
+            helper.assertTrue(original.equals(book.getTag()), "Unavailable rarities changed the stored gem data");
+            ordered.set(registry, previousRarities);
+            BookAttributeHandler.refresh(player);
+            helper.assertTrue(near(power.getValue(), neutralPower + 0.05) && near(mana.getValue(), neutralMana + 120)
+                            && original.equals(book.getTag()),
+                    "Restoring rarities did not recover gem attributes from the unchanged book");
+        } finally {
+            ordered.set(registry, previousRarities);
+            dev.shadowsoffire.apotheosis.Apotheosis.enableAdventure = previousAdventure;
+            BookAttributeHandler.onLogout(new net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent(player));
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void previewUsesTargetSlotWithoutChangingPlayer(GameTestHelper helper) throws Exception {
+        var player = player(helper, "[PreviewAttributes]");
+        var book = book();
+        Utils.setPlayerSpellbookStack(player, book);
+        MagicData magic = MagicData.getPlayerMagicData(player);
+        magic.getSyncedData().setSpellSelection(new SpellSelection("spellbook", 0));
+        var power = AttributeRegistry.SPELL_POWER.get();
+        AttributeInstance raw = player.getAttributes().getInstance(power);
+        addOtherModifiers(raw);
+        double base = raw.getBaseValue();
+        BookAttributeHandler.refresh(player);
+        double selectedValue = raw.getValue();
+        helper.assertTrue(near(selectedValue, (base + 0.15) * 1.25 * 1.5), "Selected gem fixture inactive");
+        var manaAttribute = AttributeRegistry.MAX_MANA.get();
+        AttributeInstance rawMana = player.getAttributes().getInstance(manaAttribute);
+        double selectedMaxMana = rawMana.getValue();
+        var modifiers = java.util.Set.copyOf(raw.getModifiers());
+        var manaModifiers = java.util.Set.copyOf(rawMana.getModifiers());
+        var dirty = java.util.Set.copyOf(player.getAttributes().getDirtyAttributes());
+        var castTime = AttributeRegistry.CAST_TIME_REDUCTION.get();
+        double baseCastTime = player.getAttributes().getValue(castTime);
+        magic.setMana(100);
+        float health = player.getHealth();
+        var slots = ISpellContainer.get(book).getAllSpells();
+        try {
+            SpellCastHooks.withPageContext(book, player, slots[1], slot -> {
+                helper.assertTrue(near(player.getAttributeValue(power), (base + 0.5) * 1.25 * 1.5),
+                        "Preview borrowed the selected slot instead of the target gem");
+                helper.assertTrue(player.getAttribute(power) != raw
+                                && near(player.getAttribute(power).getValue(), player.getAttributeValue(power)),
+                        "Direct attribute access did not use a detached preview");
+                helper.assertTrue(near(player.getAttributeValue(manaAttribute), rawMana.getBaseValue()),
+                        "Preview retained selected-slot maximum mana");
+                helper.assertTrue(near(player.getAttributeValue(castTime), baseCastTime + 0.3),
+                        "Preview did not include the target casting-speed gem");
+                var target = SpellCastHooks.get();
+                try {
+                    SpellCastHooks.withPageContext(book, player, slots[2], nested -> {
+                        helper.assertTrue(near(player.getAttributeValue(power), (base + 0.1) * 1.25 * 1.5),
+                                "Nested plain slot retained parent or selected bonuses");
+                        throw new IllegalStateException("preview restoration");
+                    });
+                } catch (IllegalStateException expected) {
+                    helper.assertTrue(SpellCastHooks.get() == target
+                                    && near(player.getAttributeValue(power), (base + 0.5) * 1.25 * 1.5),
+                            "Nested failure did not restore the outer preview");
+                }
+                helper.assertTrue(near(raw.getValue(), selectedValue) && near(rawMana.getValue(), selectedMaxMana)
+                                && raw.getModifiers().equals(modifiers) && rawMana.getModifiers().equals(manaModifiers),
+                        "Preview changed the real attribute map");
+                helper.assertTrue(player.getHealth() == health && magic.getMana() == 100
+                                && player.getAttributes().getDirtyAttributes().equals(dirty),
+                        "Preview changed gameplay state or scheduled attribute synchronization");
+                return null;
+            });
+            helper.assertTrue(SpellCastHooks.get() == null && player.getAttribute(power) == raw
+                            && near(player.getAttributeValue(power), selectedValue),
+                    "Preview leaked after scope close");
+            helper.succeed();
+        } finally {
+            BookAttributeHandler.onLogout(new net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent(player));
+        }
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void previewAndCastingRestoreNestedAttributeScopes(GameTestHelper helper) throws Exception {
+        var player = player(helper, "[NestedPreviewCast]");
+        var book = book();
+        Utils.setPlayerSpellbookStack(player, book);
+        MagicData.getPlayerMagicData(player).getSyncedData().setSpellSelection(new SpellSelection("spellbook", 0));
+        var power = AttributeRegistry.SPELL_POWER.get();
+        AttributeInstance raw = player.getAttributes().getInstance(power);
+        double base = raw.getBaseValue();
+        BookAttributeHandler.refresh(player);
+        var slots = ISpellContainer.get(book).getAllSpells();
+        try {
+            SpellCastHooks.withPageContext(book, player, slots[1], slot -> {
+                var previewContext = SpellCastHooks.get();
+                helper.assertTrue(near(player.getAttributeValue(power), base + 0.4), "Outer preview missing target bonus");
+                var snapshot = SpellCastHooks.capture(player, slot.getSpell(), slot.getLevel(), previewContext);
+                try (var cast = SpellCastHooks.enter(snapshot, player)) {
+                    helper.assertTrue(player.getAttribute(power) == raw && near(raw.getValue(), base + 0.4),
+                            "Gameplay scope operated on a detached preview instance");
+                    try {
+                        SpellCastHooks.withPageContext(book, player, slots[2], plain -> {
+                            helper.assertTrue(near(player.getAttributeValue(power), base) && near(raw.getValue(), base + 0.4),
+                                    "Nested preview changed the real casting attributes");
+                            throw new IllegalStateException("nested preview");
+                        });
+                    } catch (IllegalStateException expected) {
+                        helper.assertTrue(SpellCastHooks.currentSnapshot() == snapshot
+                                        && player.getAttribute(power) == raw && near(raw.getValue(), base + 0.4),
+                                "Failed preview did not restore gameplay scope");
+                    }
+                }
+                helper.assertTrue(SpellCastHooks.get() == previewContext
+                                && near(player.getAttributeValue(power), base + 0.4) && near(raw.getValue(), base + 0.05),
+                        "Gameplay close did not restore preview and selected attributes");
+                return null;
+            });
+            helper.assertTrue(near(player.getAttributeValue(power), base + 0.05), "Nested scopes leaked after rendering");
+            helper.succeed();
+        } finally {
+            BookAttributeHandler.onLogout(new net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent(player));
+        }
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void previewSupportsNonServerPlayersAndUnnamedSyncedModifiers(GameTestHelper helper) throws Exception {
+        var serverPlayer = player(helper, "[PreviewSyncSource]");
+        var book = book();
+        Utils.setPlayerSpellbookStack(serverPlayer, book);
+        MagicData.getPlayerMagicData(serverPlayer).getSyncedData().setSpellSelection(new SpellSelection("spellbook", 0));
+        var power = AttributeRegistry.SPELL_POWER.get();
+        AttributeInstance source = serverPlayer.getAttributes().getInstance(power);
+        addOtherModifiers(source);
+        BookAttributeHandler.refresh(serverPlayer);
+        var player = helper.makeMockPlayer();
+        AttributeInstance raw = player.getAttributes().getInstance(power);
+        raw.setBaseValue(source.getBaseValue());
+        for (var modifier : source.getModifiers()) {
+            raw.addTransientModifier(new AttributeModifier(modifier.getId(), "Unknown synced attribute modifier",
+                    modifier.getAmount(), modifier.getOperation()));
+        }
+        double before = raw.getValue();
+        var modifiers = java.util.Set.copyOf(raw.getModifiers());
+        var slot = ISpellContainer.get(book).getAllSpells()[1];
+        try {
+            SpellCastHooks.withPageContext(book, player, slot, current -> {
+                helper.assertTrue(near(player.getAttributeValue(power), (raw.getBaseValue() + 0.5) * 1.25 * 1.5),
+                        "Non-server preview could not replace unnamed synchronized book bonuses");
+                helper.assertTrue(near(source.getValue(), before) && near(raw.getValue(), before)
+                                && raw.getModifiers().equals(modifiers),
+                        "Preview modified either player");
+                helper.assertTrue(near(serverPlayer.getAttributeValue(power), before), "Preview affected another caster");
+                return null;
+            });
+            helper.assertTrue(near(player.getAttributeValue(power), before), "Non-server preview leaked");
+            helper.succeed();
+        } finally {
+            BookAttributeHandler.onLogout(new net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent(serverPlayer));
+        }
+    }
+
+    private static ServerPlayer player(GameTestHelper helper, String name) {
+        return FakePlayerFactory.get(helper.getLevel(), new com.mojang.authlib.GameProfile(UUID.randomUUID(), name));
+    }
+
+    private static void addOtherModifiers(AttributeInstance attribute) {
+        attribute.addTransientModifier(new AttributeModifier(UUID.randomUUID(), "apotheosis_spells:book_affix", 0.1,
+                AttributeModifier.Operation.ADDITION));
+        attribute.addTransientModifier(new AttributeModifier(UUID.randomUUID(), "other base", 0.25,
+                AttributeModifier.Operation.MULTIPLY_BASE));
+        attribute.addTransientModifier(new AttributeModifier(UUID.randomUUID(), "other total", 0.5,
+                AttributeModifier.Operation.MULTIPLY_TOTAL));
+    }
+
+    private static boolean near(double actual, double expected) { return Math.abs(actual - expected) < 0.00001; }
+
+    private static ItemStack book() throws Exception {
+        var book = new ItemStack(ForgeRegistries.ITEMS.getValue(ResourceLocation.parse("irons_spellbooks:netherite_spell_book")));
+        book.setTag(TagParser.parseTag("""
+                {"irons_spellbooks:spell_container":{maxSpells:12,mustEquip:1b,spellWheel:1b,
+                data:[{index:0,id:"irons_spellbooks:acupuncture",level:1},{index:1,id:"irons_spellbooks:acupuncture",level:1},
+                {index:2,id:"irons_spellbooks:acupuncture",level:1}]},
+                apoth_book_affixes:{"0":{spell_id:"irons_spellbooks:acupuncture",affix_data:{rarity:"apotheosis:ancient",sockets:2,
+                gems:[{id:"apotheosis:gem",Count:1b,tag:{gem:"apotheosis_spells:arcane",affix_data:{rarity:"apotheosis:common"}}},
+                {id:"apotheosis:gem",Count:1b,tag:{gem:"apotheosis_spells:mana",affix_data:{rarity:"apotheosis:ancient"}}}]}},
+                "1":{spell_id:"irons_spellbooks:acupuncture",affix_data:{rarity:"apotheosis:ancient",sockets:2,
+                gems:[{id:"apotheosis:gem",Count:1b,tag:{gem:"apotheosis_spells:arcane",affix_data:{rarity:"apotheosis:ancient"}}},
+                {id:"apotheosis:gem",Count:1b,tag:{gem:"apotheosis_spells:swiftcast",affix_data:{rarity:"apotheosis:ancient"}}}]}}}}
+                """));
+        return book;
+    }
+}

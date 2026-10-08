@@ -3,6 +3,7 @@ package com.example.apotheosis_spells.gem;
 import com.example.apotheosis_spells.api.ReforgeCache;
 import com.example.apotheosis_spells.handler.ScrollLootCategory;
 import dev.shadowsoffire.apotheosis.adventure.loot.LootRarity;
+import dev.shadowsoffire.apotheosis.adventure.loot.LootCategory;
 import dev.shadowsoffire.apotheosis.adventure.socket.gem.GemClass;
 import net.minecraft.resources.ResourceLocation;
 
@@ -18,16 +19,15 @@ import java.util.Set;
  */
 public class MageSlayerGemBonus extends SpellGemBonus {
 
-    public static final GemClass SCROLL_CLASS = new GemClass("scroll_spell",
-            Set.of(ScrollLootCategory.SCROLL, ScrollLootCategory.SPELLBOOK_SLOT));
+    public static final GemClass SCROLL_CLASS = createScrollClass();
 
-    public MageSlayerGemBonus() {
-        super(new ResourceLocation("apotheosis_spells", "mage_slayer"), SCROLL_CLASS);
+    private static GemClass createScrollClass() {
+        LootCategory category = ScrollLootCategory.SCROLL;
+        return new GemClass("scroll_spell", Set.of(category == null ? LootCategory.NONE : category));
     }
 
-    @Override
-    public boolean supports(LootRarity rarity) {
-        return true;
+    public MageSlayerGemBonus() {
+        super(ResourceLocation.fromNamespaceAndPath("apotheosis_spells", "mage_slayer"), SCROLL_CLASS);
     }
 
     @Override
@@ -38,15 +38,15 @@ public class MageSlayerGemBonus extends SpellGemBonus {
     @Override
     public ReforgeCache.Data contribute(LootRarity rarity) {
         float dmg = 1, mana = 1, cd = 1;
-        String key = dev.shadowsoffire.apotheosis.adventure.loot.RarityRegistry.INSTANCE.getKey(rarity).getPath();
+        String key = rarityKey(rarity);
         switch (key) {
             case "common" -> { dmg = 1.05f; mana = 0.97f; }
             case "uncommon" -> { dmg = 1.08f; mana = 0.95f; }
             case "rare" -> { dmg = 1.12f; mana = 0.92f; cd = 0.95f; }
             case "epic" -> { dmg = 1.18f; mana = 0.90f; cd = 0.92f; }
-            case "mythic" -> { dmg = 1.25f; mana = 0.85f; cd = 0.88f; }
-            default -> { dmg = 1.10f; mana = 0.95f; }
+            case "mythic", "ancient" -> { dmg = 1.25f; mana = 0.85f; cd = 0.88f; }
+            default -> { return ReforgeCache.Data.DEF; }
         }
-        return new ReforgeCache.Data(dmg, mana, cd, 1, 0, 1, 1, 0);
+        return new ReforgeCache.Data(dmg, mana, cd, 1, 0, 1, 1);
     }
 }
