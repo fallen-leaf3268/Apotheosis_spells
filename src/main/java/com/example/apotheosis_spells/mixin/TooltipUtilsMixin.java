@@ -10,6 +10,8 @@ import io.redspace.ironsspellbooks.api.spells.SpellData;
 import io.redspace.ironsspellbooks.api.spells.SpellSlot;
 import io.redspace.ironsspellbooks.item.Scroll;
 import io.redspace.ironsspellbooks.item.SpellBook;
+import io.redspace.ironsspellbooks.player.ClientMagicData;
+import io.redspace.ironsspellbooks.player.ClientPlayerEvents;
 import io.redspace.ironsspellbooks.util.TooltipsUtils;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.LivingEntity;
@@ -27,6 +29,20 @@ public class TooltipUtilsMixin {
 
     @Mixin(value = SpellBook.class, remap = false)
     public static class BookPages {
+        @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "appendHoverText", remap = true, at = @At(value = "INVOKE", remap = false,
+                target = "Lio/redspace/ironsspellbooks/util/TooltipsUtils;getTitleComponent(Lio/redspace/ironsspellbooks/api/spells/SpellData;Lnet/minecraft/client/player/LocalPlayer;)Lnet/minecraft/network/chat/MutableComponent;"))
+        private net.minecraft.network.chat.MutableComponent apoth_titleContext(
+                SpellData spellData, LocalPlayer player,
+                Operation<net.minecraft.network.chat.MutableComponent> original,
+                @com.llamalad7.mixinextras.sugar.Local(argsOnly = true) ItemStack stack,
+                @com.llamalad7.mixinextras.sugar.Local(ordinal = 0) int activeIndex) {
+            SpellSlot slot = ISpellContainer.get(stack).getActiveSpells().get(activeIndex);
+            try (var scope = SpellCastHooks.enter(SpellCastHooks.buildContext(stack, player,
+                    slot.index(), spellData.getLevel(), spellData))) {
+                return original.call(spellData, player);
+            }
+        }
+
         @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "getPages", at = @At(value = "INVOKE",
                 target = "Ljava/util/stream/Stream;map(Ljava/util/function/Function;)Ljava/util/stream/Stream;"))
         private java.util.stream.Stream<net.minecraft.network.chat.Component> apoth_pageContext(
@@ -37,6 +53,20 @@ public class TooltipUtilsMixin {
             java.util.function.Function<SpellSlot, net.minecraft.network.chat.Component> scoped = slot ->
                     SpellCastHooks.withPageContext(stack, net.minecraft.client.Minecraft.getInstance().player, slot, render);
             return original.call(slots, scoped);
+        }
+    }
+
+    @Mixin(value = ClientPlayerEvents.class, remap = false)
+    public static class CastingImplementTooltips {
+        @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "handleCastingImplementTooltip", at = @At(value = "INVOKE",
+                target = "Lio/redspace/ironsspellbooks/util/TooltipsUtils;formatActiveSpellTooltip(Lnet/minecraft/world/item/ItemStack;Lio/redspace/ironsspellbooks/api/spells/SpellData;Lio/redspace/ironsspellbooks/api/spells/CastSource;Lnet/minecraft/client/player/LocalPlayer;)Ljava/util/List;"))
+        private static List<net.minecraft.network.chat.MutableComponent> apoth_selectedContext(
+                ItemStack stack, SpellData spellData, CastSource castSource, LocalPlayer player,
+                Operation<List<net.minecraft.network.chat.MutableComponent>> original) {
+            var selection = ClientMagicData.getSpellSelectionManager().getSelection();
+            try (var scope = SpellCastHooks.enter(SpellCastHooks.resolveSelection(player, selection))) {
+                return original.call(null, spellData, castSource, player);
+            }
         }
     }
 

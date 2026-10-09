@@ -189,15 +189,16 @@ public final class SpellCastHooks {
                         key -> BookAttributeHandler.previewAttribute(preview.player(), key, preview.bonuses()));
     }
 
-    private record CastSelection(Player player, SpellSelectionManager.SelectionOption selection) {}
+    private record CastSelection(Player player, SpellSelectionManager.SelectionOption selection,
+                                 ItemStack implement, String implementSlot) {}
 
     public static final class SourceScope implements AutoCloseable {
         private final CastSelection previous;
         private boolean closed;
 
-        private SourceScope(Player player, SpellSelectionManager.SelectionOption selection) {
+        private SourceScope(CastSelection selection) {
             previous = SOURCE.get();
-            SOURCE.set(new CastSelection(player, selection));
+            SOURCE.set(selection);
         }
 
         @Override
@@ -209,7 +210,12 @@ public final class SpellCastHooks {
     }
 
     public static SourceScope enterSource(Player player, SpellSelectionManager.SelectionOption selection) {
-        return new SourceScope(player, selection);
+        return new SourceScope(new CastSelection(player, selection, null, null));
+    }
+
+    public static SourceScope enterSource(Player player, SpellSelectionManager.SelectionOption selection,
+                                         ItemStack implement, String equipmentSlot) {
+        return new SourceScope(new CastSelection(player, selection, implement, equipmentSlot));
     }
 
     private static void setCurrent(Context context, Snapshot snapshot) {
@@ -284,9 +290,12 @@ public final class SpellCastHooks {
         CastSelection requested = SOURCE.get();
         if (requested != null && requested.player() == player) {
             Context selected = resolveSelection(player, requested.selection());
-            if (selected == null || !requested.selection().slot.equals(equipmentSlot)
-                    || !selected.spellData().getSpell().getSpellId().equals(spellId)
-                    || stack != null && !stack.isEmpty() && stack != selected.stack()) return null;
+            if (selected == null || !selected.spellData().getSpell().getSpellId().equals(spellId)) return null;
+            boolean sourceMatches = requested.selection().slot.equals(equipmentSlot)
+                    && (stack == null || stack.isEmpty() || stack == selected.stack());
+            boolean implementMatches = requested.implement() != null && !requested.implement().isEmpty()
+                    && requested.implement() == stack && java.util.Objects.equals(requested.implementSlot(), equipmentSlot);
+            if (!sourceMatches && !implementMatches) return null;
             return new Context(selected.stack(), player, selected.spellSlotIndex(), level, selected.data(), selected.spellData());
         }
         ItemStack source = stack == null ? ItemStack.EMPTY : stack;

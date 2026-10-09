@@ -83,15 +83,6 @@ public class SpellWheelMixin {
     }
 
     @WrapOperation(method = "render", at = @At(value = "INVOKE",
-            target = "Lio/redspace/ironsspellbooks/api/spells/AbstractSpell;getEffectiveCastTime(ILnet/minecraft/world/entity/LivingEntity;)I"))
-    private int apoth_castTime(AbstractSpell spell, int level, LivingEntity caster, Operation<Integer> original) {
-        var context = apoth_context();
-        if (context == null) return original.call(spell, level, caster);
-        int base = original.call(spell, level, caster);
-        return Math.max(0, Math.round(base * context.data().cast()));
-    }
-
-    @WrapOperation(method = "render", at = @At(value = "INVOKE",
             target = "Lio/redspace/ironsspellbooks/util/TooltipsUtils;getLevelComponenet(Lio/redspace/ironsspellbooks/api/spells/SpellData;Lnet/minecraft/world/entity/LivingEntity;)Lnet/minecraft/network/chat/MutableComponent;"))
     private MutableComponent apoth_levelComponent(SpellData spellData, LivingEntity caster,
                                                    Operation<MutableComponent> original) {

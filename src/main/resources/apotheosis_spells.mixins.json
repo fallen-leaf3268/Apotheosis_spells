@@ -8,6 +8,9 @@
         "ReforgeMixin",
         "CastMixin",
         "CastSourceMixin",
+        "CastSourceMixin$CastingItem",
+        "CastSourceMixin$MarkedImplement",
+        "SpellCastTimeMixin",
         "PreviewAttributeMixin",
         "PreviewAttributeMixin$AttributeMapSource",
         "SyncMixin",
@@ -29,11 +32,15 @@
         "SpellRadiusIntMixin",
         "SpellRangeFloatMixin",
         "SpellRangeStaticMixin",
-        "SpellRangeStatic1ArgMixin"
+        "SpellRangeStatic1ArgMixin",
+        "SiphoningRangeEntityMixin",
+        "SiphoningRangeSyncMixin"
     ],
     "client": [
         "TooltipUtilsMixin",
         "TooltipUtilsMixin$BookPages",
+        "TooltipUtilsMixin$CastingImplementTooltips",
+        "SiphoningBeamRenderMixin",
         "SpellWheelMixin",
         "InscriptionTableScreenMixin"
     ],

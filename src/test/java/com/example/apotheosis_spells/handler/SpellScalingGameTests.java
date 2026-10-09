@@ -29,6 +29,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.util.FakePlayerFactory;
@@ -83,20 +84,18 @@ public final class SpellScalingGameTests {
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void scorchRadiusMatchesAimInitialHitAndFireField(GameTestHelper helper) {
         var player = player(helper, "ScorchRadius");
-        player.setPos(helper.absoluteVec(new Vec3(1.5, 3, 1.5)));
         player.setXRot(90);
-        helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
         var spell = SpellRegistry.SCORCH_SPELL.get();
         var magic = MagicData.getPlayerMagicData(player);
         var cleanup = new ArrayList<Entity>();
-        var elevatedFloor = helper.absolutePos(new BlockPos(1, 128, 1));
+        var testOrigin = helper.absolutePos(new BlockPos(1, 128, 1));
+        var elevatedFloor = new BlockPos((testOrigin.getX() & ~15) + 8, testOrigin.getY(),
+                (testOrigin.getZ() & ~15) + 8);
         var originalFloor = helper.getLevel().getBlockState(elevatedFloor);
         try {
+            helper.getLevel().setBlockAndUpdate(elevatedFloor, Blocks.STONE.defaultBlockState());
+            player.setPos(Vec3.atBottomCenterOf(elevatedFloor.above(3)));
             for (float multiplier : new float[]{1, 2, 16}) {
-                if (multiplier == 16) {
-                    player.setPos(helper.absoluteVec(new Vec3(1.5, 131, 1.5)));
-                    helper.getLevel().setBlockAndUpdate(elevatedFloor, Blocks.STONE.defaultBlockState());
-                }
                 var data = scaling(multiplier, 1);
                 float expected = multiplier == 16 ? 32 : 2.5f * multiplier;
                 assertInfo(helper, spell, player, data, "ui.irons_spellbooks.radius", Utils.stringTruncation(expected, 1));
@@ -109,6 +108,14 @@ public final class SpellScalingGameTests {
                     var target = target(helper, cleanup, area.getCenter().add(3.75, 0, 0));
                     helper.assertTrue(helper.getLevel().getEntitiesOfClass(LivingEntity.class, target.getBoundingBox()).contains(target),
                             "Scorch target is unavailable to the native entity query: multiplier=" + multiplier);
+                    helper.assertTrue(Utils.hasLineOfSight(helper.getLevel(), area.getCenter().add(0, 1.5, 0),
+                                    target.getBoundingBox().getCenter(), true),
+                            "Scorch fixture blocked the native damage sight line: multiplier=" + multiplier);
+                    var damageBounds = new AABB(area.getCenter().subtract(expected, expected, expected),
+                            area.getCenter().add(expected, expected, expected));
+                    helper.assertTrue(helper.getLevel().getEntitiesOfClass(LivingEntity.class, damageBounds).contains(target)
+                                    == (multiplier != 1),
+                            "Scorch fixture disagrees with the native damage query: multiplier=" + multiplier);
                     float health = target.getHealth();
                     FireField field = capture(helper, FireField.class, cleanup,
                             () -> spell.onCast(helper.getLevel(), 1, player, CastSource.COMMAND, magic));

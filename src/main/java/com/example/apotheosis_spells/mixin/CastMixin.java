@@ -17,12 +17,18 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.Set;
+
 @Mixin(value = AbstractSpell.class, remap = false)
 public class CastMixin {
+    @Unique private static final Set<String> APOTH_DELAYED_POWER_SPELLS = Set.of(
+            "irons_spellbooks:frostbite", "irons_spellbooks:echoing_strikes", "irons_spellbooks:thunderstorm");
+
     @WrapMethod(method = "attemptInitiateCast")
     private boolean apoth_attempt(ItemStack stack, int level, Level world, Player player,
                                   CastSource source, boolean cooldown, String slot, Operation<Boolean> original) {
@@ -154,13 +160,21 @@ public class CastMixin {
 
     @Inject(method = "getSpellPower", at = @At("RETURN"), cancellable = true)
     private void apoth_spellPower(int level, net.minecraft.world.entity.Entity caster, CallbackInfoReturnable<Float> cir) {
-        if (!SpellCastHooks.matches((AbstractSpell) (Object) this, caster)) return;
+        if (caster == null || !SpellCastHooks.matches((AbstractSpell) (Object) this, caster)) return;
         float before = cir.getReturnValueF();
         cir.setReturnValue(before * SpellCastHooks.get().data().dmg());
         var context = SpellCastHooks.get();
         if (context.castContext() && context.caster() != null) Diagnostics.calculation("POWER_CALC",
                 context.caster().getUUID() + ":" + ((AbstractSpell) (Object) this).getSpellId(),
                 "level=" + level + " before=" + before + " multiplier=" + context.data().dmg() + " after=" + cir.getReturnValueF());
+    }
+
+    @Inject(method = "getEntityPowerMultiplier", at = @At("RETURN"), cancellable = true)
+    private void apoth_entityPower(LivingEntity caster, CallbackInfoReturnable<Float> cir) {
+        var spell = (AbstractSpell) (Object) this;
+        if (caster == null || !SpellCastHooks.matches(spell, caster)
+                || APOTH_DELAYED_POWER_SPELLS.contains(spell.getSpellId())) return;
+        cir.setReturnValue(cir.getReturnValueF() * SpellCastHooks.get().data().dmg());
     }
 
     @Inject(method = "getEffectiveCastTime", at = @At("RETURN"), cancellable = true)

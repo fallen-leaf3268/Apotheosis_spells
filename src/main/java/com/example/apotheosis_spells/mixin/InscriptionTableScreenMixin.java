@@ -45,7 +45,7 @@ public class InscriptionTableScreenMixin {
     @Redirect(method = "renderLorePage", at = @At(value = "INVOKE",
             target = "Lio/redspace/ironsspellbooks/api/spells/SpellSlot;getLevel()I"))
     private int apoth_level(SpellSlot slot) {
-        int base = slot.getLevel();
+        int base = slot.getSpell().getLevelFor(slot.getLevel(), Minecraft.getInstance().player);
         var ctx = SpellCastHooks.get();
         return (ctx != null && ctx.data() != null && ctx.data().lvl() > 0) ? base + ctx.data().lvl() : base;
     }
