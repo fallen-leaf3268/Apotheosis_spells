@@ -42,6 +42,8 @@ import java.util.function.Consumer;
 @Mod.EventBusSubscriber(modid = ApotheosisSpells.MODID, value = Dist.CLIENT)
 public final class DisplayUiClientProbe {
     private static boolean started;
+    private static boolean respawnRequested;
+    private static int respawnWaitTicks;
     private static int readyTicks;
     private static String lastScreen;
 
@@ -92,7 +94,27 @@ public final class DisplayUiClientProbe {
             }
             return;
         }
-        if (minecraft.player == null || minecraft.level == null || ++readyTicks < 20) return;
+        if (respawnRequested && (minecraft.player == null || minecraft.level == null || minecraft.player.isDeadOrDying())) {
+            readyTicks = 0;
+            if (++respawnWaitTicks >= 200) {
+                started = true;
+                ApotheosisSpells.LOGGER.error("UI_PROBE_FAIL fixture=respawn_timeout ticks=" + respawnWaitTicks);
+                minecraft.stop();
+            }
+            return;
+        }
+        if (minecraft.player == null || minecraft.level == null) {
+            readyTicks = 0;
+            return;
+        }
+        if (minecraft.player.isDeadOrDying()) {
+            readyTicks = 0;
+            respawnRequested = true;
+            ApotheosisSpells.LOGGER.info("UI_PROBE_TEST_PLAYER_RESPAWN_REQUESTED");
+            minecraft.player.respawn();
+            return;
+        }
+        if (++readyTicks < 40) return;
         started = true;
         List<Throwable> failures = new ArrayList<>();
         run("book_titles", () -> bookTitles(minecraft), failures);

@@ -343,15 +343,18 @@ final class FullDisplayClientCases {
                             inscribedLabels++;
                         }
                     }
-                    check(heading > 0 && directLabels == 1 && inscribedLabels == 1,
-                            "Attribute scroll tooltip did not retain exactly one direct and native inscribed heading: " + mode);
-                    String directText = lines.subList(0, heading).stream().map(Component::getString).collect(java.util.stream.Collectors.joining("\n"));
-                    String inscribedText = lines.subList(heading + 1, lines.size()).stream().map(Component::getString).collect(java.util.stream.Collectors.joining("\n"));
-                    for (var unique : direct.unique) contains(directText, unique.getString(), "scroll direct-use attribute preview " + mode);
-                    for (var unique : expected.unique) contains(inscribedText, unique.getString(), "scroll book-result attribute preview " + mode);
-                    check(expected.unique.stream().noneMatch(unique -> directText.contains(unique.getString()))
-                                    && direct.unique.stream().noneMatch(unique -> inscribedText.contains(unique.getString())),
-                            "Attribute scroll tooltip mixed direct and inscribed damage sections: " + mode);
+                    check(heading > 0 && directLabels == 0 && inscribedLabels == 1,
+                            "Attribute scroll tooltip did not retain its native single-value layout: " + mode);
+                    checkTooltip(lines, spell, expected, false, true, "scroll book-result attribute preview " + mode);
+                    String text = lines.stream().map(Component::getString).collect(java.util.stream.Collectors.joining("\n"));
+                    String details = lines.subList(0, heading).stream().map(Component::getString).collect(java.util.stream.Collectors.joining("\n"));
+                    for (var unique : expected.unique) {
+                        contains(details, unique.getString(), "native scroll detail placement " + mode);
+                        check(lines.stream().filter(line -> line.getString().strip().equals(unique.getString().strip())).count() == 1,
+                                "Attribute scroll tooltip duplicated its book-result unique info: " + mode);
+                    }
+                    check(direct.unique.stream().noneMatch(unique -> text.contains(unique.getString())),
+                            "Attribute scroll tooltip retained an extra direct-use damage value: " + mode);
                     check(BookAttributeHandler.capture(scrollContext).isEmpty(), "Scroll preview changed execution attribute capture");
                     check(Math.abs(raw.getValue() - beforeValue) < 0.000001
                                     && beforeModifiers.equals(java.util.Set.copyOf(raw.getModifiers())),

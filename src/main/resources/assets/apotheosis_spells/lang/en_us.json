@@ -118,7 +118,6 @@
   "affix.apotheosis_spells:scroll/attribute/nature_spell_power.suffix": "of Thorns",
   "affix.apotheosis_spells:scroll/attribute/eldritch_spell_power": "Eldritch",
   "affix.apotheosis_spells:scroll/attribute/eldritch_spell_power.suffix": "of the Deep",
-  "tooltip.apotheosis_spells.scroll_direct": "Direct use (current equipment):",
   "gem_class.scroll_caster": "Scroll Inscription",
   "gem_class.scroll_spell": "Spell Empowerment"
 }
