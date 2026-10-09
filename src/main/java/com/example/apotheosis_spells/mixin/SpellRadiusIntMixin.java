@@ -12,7 +12,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * getRadius 同时驱动 tooltip 范围数值与实际爆炸半径(setExplosionRadius)，hook 返回值即可两者一起缩放。
  * 见 {@link SpellRadiusFloatMixin}（返回 float 的其余法术）。
  */
-@Mixin(value = io.redspace.ironsspellbooks.spells.fire.FireballSpell.class, remap = false)
+@Mixin(value = {
+        io.redspace.ironsspellbooks.spells.fire.FireballSpell.class,
+        io.redspace.ironsspellbooks.spells.evocation.SpectralHammerSpell.class
+}, remap = false)
 public class SpellRadiusIntMixin {
 
     @Inject(method = "getRadius", at = @At("RETURN"), cancellable = true)

@@ -98,7 +98,14 @@ public final class DisplayUiClientProbe {
         run("book_titles", () -> bookTitles(minecraft), failures);
         run("casting_implement", () -> castingImplement(minecraft), failures);
         run("inscription_level", () -> inscriptionLevel(minecraft), failures);
-        if (failures.isEmpty()) ApotheosisSpells.LOGGER.info("UI_PROBE_PASS cases=3");
+        run("full_scroll_tooltips", () -> FullDisplayClientCases.scrolls(minecraft), failures);
+        run("full_sparse_book_pages", () -> FullDisplayClientCases.pages(minecraft), failures);
+        run("expanded_duplicate_book_details", () -> FullDisplayClientCases.expandedDuplicateBook(minecraft), failures);
+        run("real_slot_attribute_previews", () -> FullDisplayClientCases.slotAttributes(minecraft), failures);
+        run("wheel_render_lifecycle", () -> FullDisplayClientCases.wheel(minecraft), failures);
+        run("inscription_values_extraction", () -> FullDisplayClientCases.inscription(minecraft), failures);
+        run("siphoning_geometry_metadata_occlusion", () -> FullDisplayClientCases.siphoning(minecraft), failures);
+        if (failures.isEmpty()) ApotheosisSpells.LOGGER.info("UI_PROBE_PASS cases=10");
         else ApotheosisSpells.LOGGER.error("UI_PROBE_FAIL cases=" + failures.size());
         minecraft.stop();
     }
@@ -248,6 +255,7 @@ public final class DisplayUiClientProbe {
 
     private static void run(String name, CheckedAction action, List<Throwable> failures) {
         try {
+            ApotheosisSpells.LOGGER.info("UI_PROBE_CASE_START " + name);
             action.run();
             ApotheosisSpells.LOGGER.info("UI_PROBE_CASE_PASS " + name);
         } catch (Throwable error) {

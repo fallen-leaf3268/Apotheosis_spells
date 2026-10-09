@@ -11,7 +11,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(value = {
         io.redspace.ironsspellbooks.spells.nature.RootSpell.class,
         io.redspace.ironsspellbooks.spells.nature.PoisonSplashSpell.class,
-        io.redspace.ironsspellbooks.spells.holy.HealingCircleSpell.class
+        io.redspace.ironsspellbooks.spells.holy.HealingCircleSpell.class,
+        io.redspace.ironsspellbooks.spells.evocation.InvisibilitySpell.class,
+        io.redspace.ironsspellbooks.spells.evocation.SlowSpell.class,
+        io.redspace.ironsspellbooks.spells.holy.HasteSpell.class,
+        io.redspace.ironsspellbooks.spells.fire.HeatSurgeSpell.class,
+        io.redspace.ironsspellbooks.spells.ice.FrostwaveSpell.class,
+        io.redspace.ironsspellbooks.spells.nature.BlightSpell.class
 }, remap = false)
 public class SpellDurationMixin {
     @Inject(method = "getDuration", at = @At("RETURN"), cancellable = true)

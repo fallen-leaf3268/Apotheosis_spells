@@ -14,6 +14,9 @@ import io.redspace.ironsspellbooks.capabilities.magic.TargetEntityCastData;
 import io.redspace.ironsspellbooks.entity.spells.ice_tomb.IceTombEntity;
 import io.redspace.ironsspellbooks.entity.spells.magma_ball.FireBomb;
 import io.redspace.ironsspellbooks.entity.spells.void_tentacle.VoidTentacle;
+import io.redspace.ironsspellbooks.entity.spells.target_area.TargetedAreaEntity;
+import io.redspace.ironsspellbooks.registries.MobEffectRegistry;
+import io.redspace.ironsspellbooks.spells.TargetedTargetAreaCastData;
 import io.redspace.ironsspellbooks.spells.evocation.GustSpell;
 import io.redspace.ironsspellbooks.spells.fire.MagmaBombSpell;
 import io.redspace.ironsspellbooks.spells.ice.IceTombSpell;
@@ -23,6 +26,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.effect.MobEffect;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -263,24 +268,115 @@ public final class SpellPowerGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 100)
-    public static void delayedEffectHelpersKeepNativeBaseline(GameTestHelper helper) {
+    public static void delayedEffectHelpersUsePowerOnce(GameTestHelper helper) {
         var player = player(helper, "DelayedPower");
         for (var spell : List.of(SpellRegistry.FROSTBITE_SPELL.get(), SpellRegistry.ECHOING_STRIKES_SPELL.get(),
                 SpellRegistry.THUNDERSTORM_SPELL.get())) {
             float original = spell.getEntityPowerMultiplier(player);
             try (var scope = SpellCastHooks.enter(preview(player, spell, scaling(1.5f, 1)))) {
-                near(helper, spell.getEntityPowerMultiplier(player), original, "Delayed effect preview multiplier");
+                near(helper, spell.getEntityPowerMultiplier(player), original * 1.5f, "Delayed effect preview multiplier");
+                near(helper, spell.getEntityPowerMultiplier(null), 1, "Delayed null-caster reference multiplier");
             }
             try (var scope = SpellCastHooks.enter(snapshot(player, spell, scaling(1.5f, 1)), player)) {
-                near(helper, spell.getEntityPowerMultiplier(player), original, "Delayed effect execution multiplier");
+                near(helper, spell.getEntityPowerMultiplier(player), original * 1.5f, "Delayed effect execution multiplier");
             }
         }
         helper.succeed();
     }
 
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void allEnabledSpellPreviewsMatchNativePower(GameTestHelper helper) {
+        var player = player(helper, "AllPowerPreviews");
+        var failures = new ArrayList<String>();
+        int spells = 0;
+        int cases = 0;
+        for (var spell : SpellRegistry.REGISTRY.get().getValues()) {
+            if (spell == SpellRegistry.none() || !spell.isEnabled()) continue;
+            spells++;
+            for (int level : new int[]{1, Math.max(1, spell.getMaxLevel())}) {
+                var expected = nativePower(player, 1.5f,
+                        () -> spell.getUniqueInfo(level, player).stream().map(component -> component.getString()).toList());
+                var context = new SpellCastHooks.Context(ItemStack.EMPTY, player, -1, level,
+                        scaling(1.5f, 1), new SpellData(spell, level));
+                try (var scope = SpellCastHooks.enter(context)) {
+                    var actual = spell.getUniqueInfo(level, player).stream().map(component -> component.getString()).toList();
+                    if (!actual.equals(expected)) failures.add(spell.getSpellId() + " level=" + level
+                            + " actual=" + actual + " expected=" + expected);
+                }
+                cases++;
+            }
+        }
+        System.out.println("APOTH_POWER_PREVIEW_MATRIX spells=" + spells + " cases=" + cases);
+        helper.assertTrue(spells > 0 && failures.isEmpty(), "Enabled spell preview power mismatch: " + failures);
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void nativeBuffAmplifiersAndDurationsMatchPowerOracle(GameTestHelper helper) {
+        var player = player(helper, "BuffPower");
+        player.setPos(helper.absoluteVec(new Vec3(1, 130, 1)));
+        var recipient = EntityType.COW.create(helper.getLevel());
+        recipient.setNoAi(true);
+        recipient.setNoGravity(true);
+        recipient.setPos(helper.absoluteVec(new Vec3(1, 130, 2)));
+        helper.getLevel().addFreshEntity(recipient);
+        var magic = MagicData.getPlayerMagicData(player);
+        var area = new TargetedAreaEntity(helper.getLevel(), 3, 0);
+        magic.setAdditionalCastData(new TargetedTargetAreaCastData(recipient, area));
+        helper.runAfterDelay(4, () -> {
+            try {
+                for (var spell : List.of(SpellRegistry.OAKSKIN_SPELL.get(), SpellRegistry.HASTE_SPELL.get(),
+                        SpellRegistry.CHARGE_SPELL.get(), SpellRegistry.FORTIFY_SPELL.get())) {
+                    for (int level : new int[]{1, Math.max(1, spell.getMaxLevel())}) {
+                        for (float multiplier : new float[]{1, 1.5f}) {
+                            player.removeAllEffects();
+                            recipient.removeAllEffects();
+                            var expected = nativePower(player, multiplier,
+                                    () -> castBuff(helper, player, recipient, spell, level, magic));
+                            player.removeAllEffects();
+                            recipient.removeAllEffects();
+                            var snapshot = new SpellCastHooks.Snapshot(player.getUUID(), spell.getSpellId(), level,
+                                    scaling(multiplier, 1), SpellEffects.NONE);
+                            MobEffectInstance actual;
+                            try (var scope = SpellCastHooks.enter(snapshot, player)) {
+                                actual = castBuff(helper, player, recipient, spell, level, magic);
+                            }
+                            helper.assertTrue(actual.getAmplifier() == expected.getAmplifier(),
+                                    "Buff amplifier differs from native power: " + spell.getSpellId() + " level=" + level);
+                            helper.assertTrue(actual.getDuration() == expected.getDuration(),
+                                    "Buff duration differs from native power: " + spell.getSpellId() + " level=" + level);
+                        }
+                    }
+                }
+                helper.succeed();
+            } finally {
+                player.removeAllEffects();
+                recipient.discard();
+                area.discard();
+                magic.setAdditionalCastData(null);
+            }
+        });
+    }
+
+    private static MobEffectInstance castBuff(GameTestHelper helper, ServerPlayer player, LivingEntity recipient,
+                                               AbstractSpell spell, int level, MagicData magic) {
+        spell.onCast(helper.getLevel(), level, player, CastSource.COMMAND, magic);
+        MobEffect effect = switch (spell.getSpellId()) {
+            case "irons_spellbooks:oakskin" -> MobEffectRegistry.OAKSKIN.get();
+            case "irons_spellbooks:haste" -> MobEffectRegistry.HASTENED.get();
+            case "irons_spellbooks:charge" -> MobEffectRegistry.CHARGED.get();
+            default -> MobEffectRegistry.FORTIFY.get();
+        };
+        var result = (spell == SpellRegistry.HASTE_SPELL.get() || spell == SpellRegistry.FORTIFY_SPELL.get()
+                ? recipient : player).getEffect(effect);
+        helper.assertTrue(result != null, "Native buff did not apply: " + spell.getSpellId());
+        return result;
+    }
+
     private static ServerPlayer player(GameTestHelper helper, String name) {
         var player = FakePlayerFactory.get(helper.getLevel(), new GameProfile(UUID.randomUUID(), "[" + name + "]"));
         player.setPos(helper.absoluteVec(new Vec3(1, 2, -5)));
+        player.getAttribute(dev.shadowsoffire.attributeslib.api.ALObjects.Attributes.CRIT_CHANCE.get()).setBaseValue(0);
         MagicData.getPlayerMagicData(player).getSyncedData();
         return player;
     }

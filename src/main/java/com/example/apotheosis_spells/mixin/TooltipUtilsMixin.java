@@ -43,6 +43,19 @@ public class TooltipUtilsMixin {
             }
         }
 
+        @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "appendHoverText", remap = true, at = @At(value = "INVOKE", remap = false,
+                target = "Lio/redspace/ironsspellbooks/util/TooltipsUtils;formatActiveSpellTooltip(Lnet/minecraft/world/item/ItemStack;Lio/redspace/ironsspellbooks/api/spells/SpellData;Lio/redspace/ironsspellbooks/api/spells/CastSource;Lnet/minecraft/client/player/LocalPlayer;)Ljava/util/List;"))
+        private List<net.minecraft.network.chat.MutableComponent> apoth_expandedContext(
+                ItemStack stack, SpellData spellData, CastSource source, LocalPlayer player,
+                Operation<List<net.minecraft.network.chat.MutableComponent>> original,
+                @com.llamalad7.mixinextras.sugar.Local(ordinal = 0) int activeIndex) {
+            SpellSlot slot = ISpellContainer.get(stack).getActiveSpells().get(activeIndex);
+            try (var scope = SpellCastHooks.enter(SpellCastHooks.buildContext(stack, player,
+                    slot.index(), spellData.getLevel(), spellData))) {
+                return original.call(null, spellData, source, player);
+            }
+        }
+
         @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "getPages", at = @At(value = "INVOKE",
                 target = "Ljava/util/stream/Stream;map(Ljava/util/function/Function;)Ljava/util/stream/Stream;"))
         private java.util.stream.Stream<net.minecraft.network.chat.Component> apoth_pageContext(
