@@ -8,6 +8,7 @@ import dev.shadowsoffire.apotheosis.adventure.affix.AffixInstance;
 import dev.shadowsoffire.apotheosis.adventure.socket.SocketHelper;
 import io.redspace.ironsspellbooks.api.magic.SpellSelectionManager;
 import io.redspace.ironsspellbooks.item.SpellBook;
+import io.redspace.ironsspellbooks.item.Scroll;
 import io.redspace.ironsspellbooks.api.registry.SpellRegistry;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
@@ -148,6 +149,16 @@ public class BookAttributeHandler {
                 || context == null || context.stack() == null || !(context.stack().getItem() instanceof SpellBook)
                 || context.spellData() == null || context.spellData().getSpell() == null) return List.of();
         CompoundTag data = ReforgeCache.getBookAffix(context.stack(), context.spellSlotIndex());
+        if (data == null || data.isEmpty()) return List.of();
+        return toBonuses(collectModifiers(new SelectedSpell(context.spellData().getSpell().getSpellId(),
+                context.spellData().getLevel(), data)));
+    }
+
+    public static List<SpellCastHooks.AttributeBonus> captureInscribedScroll(SpellCastHooks.Context context) {
+        if (!dev.shadowsoffire.apotheosis.Apotheosis.enableAdventure
+                || context == null || context.stack() == null || !(context.stack().getItem() instanceof Scroll)
+                || context.spellData() == null || context.spellData().getSpell() == null) return List.of();
+        CompoundTag data = ReforgeCache.scrollAffixData(context.stack());
         if (data == null || data.isEmpty()) return List.of();
         return toBonuses(collectModifiers(new SelectedSpell(context.spellData().getSpell().getSpellId(),
                 context.spellData().getLevel(), data)));

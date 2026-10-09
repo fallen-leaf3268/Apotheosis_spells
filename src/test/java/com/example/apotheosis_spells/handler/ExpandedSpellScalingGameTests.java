@@ -365,6 +365,7 @@ public final class ExpandedSpellScalingGameTests {
     @GameTest(template = "empty", timeoutTicks = 100)
     public static void gustRangeExtendsItsActualCollisionCone(GameTestHelper helper) throws ReflectiveOperationException {
         var caster = player(helper, "GustGeometry");
+        caster.setPos(caster.getX(), helper.absolutePos(new BlockPos(0, 192, 0)).getY(), caster.getZ());
         var spell = SpellRegistry.getSpell("irons_spellbooks:gust");
         var cleanup = new ArrayList<Entity>();
         try {

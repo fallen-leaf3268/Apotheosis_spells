@@ -88,7 +88,7 @@ public final class SpellScalingGameTests {
         var spell = SpellRegistry.SCORCH_SPELL.get();
         var magic = MagicData.getPlayerMagicData(player);
         var cleanup = new ArrayList<Entity>();
-        var testOrigin = helper.absolutePos(new BlockPos(1, 128, 1));
+        var testOrigin = helper.absolutePos(new BlockPos(1, 256, 1));
         var elevatedFloor = new BlockPos((testOrigin.getX() & ~15) + 8, testOrigin.getY(),
                 (testOrigin.getZ() & ~15) + 8);
         var originalFloor = helper.getLevel().getBlockState(elevatedFloor);

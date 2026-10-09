@@ -47,6 +47,8 @@ import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.item.ItemStack;
@@ -242,6 +244,158 @@ final class FullDisplayClientCases {
         check(saved.equals(book.getTag()) && SpellCastHooks.get() == null, "Attribute preview changed source NBT or leaked context");
     }
 
+    static void scrollAttributePreviews(Minecraft minecraft) throws Exception {
+        var player = minecraft.player;
+        var spell = SpellRegistry.getSpell("irons_spellbooks:magic_missile");
+        var affixData = new CompoundTag();
+        affixData.putString("rarity", "apotheosis:ancient");
+        var affixes = new CompoundTag();
+        affixes.putFloat("apotheosis_spells:scroll/spell_modifier/spell_level", 1);
+        affixes.putFloat("apotheosis_spells:scroll/spell_modifier/spell_power", 1);
+        affixes.putFloat("apotheosis_spells:scroll/attribute/ender_spell_power", 1);
+        affixData.put("affixes", affixes);
+        var scroll = ReforgeCache.createAffixedScroll(spell, 10, affixData);
+        var heldScroll = ReforgeCache.createAffixedScroll(spell, 10, affixData.copy());
+        var book = book(spell, "plain");
+        book.getTag().getCompound("irons_spellbooks:spell_container").getList("data", 10).getCompound(1).putInt("level", 10);
+        ReforgeCache.setBookAffix(book, 2, affixData);
+        var slot = ISpellContainer.get(book).getAllSpells()[2];
+        var data = ISpellContainer.get(scroll).getSpellAtIndex(0);
+        var scrollContext = SpellCastHooks.buildContext(scroll, player, 0, data.getLevel(), data);
+        check(scrollContext.data().lvl() == 5 && Math.abs(scrollContext.data().dmg() - 1.5) < 0.000001,
+                "Magic Missile regression fixture did not resolve level +5 and power +50%");
+        check(BookAttributeHandler.capture(scrollContext).isEmpty(), "Direct scroll casts must retain native equipment attributes");
+        var attribute = ForgeRegistries.ATTRIBUTES.getValue(ResourceLocation.parse("irons_spellbooks:ender_spell_power"));
+        var raw = player.getAttributes().getInstance(attribute);
+        var power = player.getAttributes().getInstance(io.redspace.ironsspellbooks.api.registry.AttributeRegistry.SPELL_POWER.get());
+        check(raw != null && power != null, "Native client power attributes are absent");
+        var original = new AttributeInstance(attribute, ignored -> {});
+        original.replaceFrom(raw);
+        var originalPower = new AttributeInstance(io.redspace.ironsspellbooks.api.registry.AttributeRegistry.SPELL_POWER.get(), ignored -> {});
+        originalPower.replaceFrom(power);
+        ItemStack mainhand = player.getMainHandItem();
+        ItemStack offhand = player.getOffhandItem();
+        var nativeModifiers = new LinkedHashMap<EquipmentSlot, List<AttributeModifier>>();
+        for (var hand : List.of(EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND)) {
+            var modifiers = List.copyOf(heldScroll.getAttributeModifiers(hand).get(attribute));
+            check(modifiers.size() == 1 && modifiers.get(0).getOperation() == AttributeModifier.Operation.ADDITION
+                            && Math.abs(modifiers.get(0).getAmount() - 0.28) < 0.000001,
+                    "Native " + hand + " scroll attributes did not provide the ancient +0.28 endpoint");
+            nativeModifiers.put(hand, modifiers);
+        }
+        var savedScroll = scroll.getTag().copy();
+        var savedHeld = heldScroll.getTag().copy();
+        var savedBook = book.getTag().copy();
+        var menu = new InscriptionTableMenu(0, player.getInventory(), ContainerLevelAccess.NULL);
+        menu.getSpellBookSlot().set(book);
+        var screen = new InscriptionTableScreen(menu, player.getInventory(), Component.literal("UI scroll attributes"));
+        screen.init(minecraft, minecraft.getWindow().getGuiScaledWidth(), minecraft.getWindow().getGuiScaledHeight());
+        method(InscriptionTableScreen.class, "generateSpellSlots").invoke(screen);
+        field(InscriptionTableScreen.class, "selectedSpellIndex").setInt(screen, 2);
+        var render = method(InscriptionTableScreen.class, "renderLorePage", GuiGraphics.class, float.class, int.class, int.class);
+        var outer = new SpellCastHooks.Context(ItemStack.EMPTY, player, -1, 1, ReforgeCache.Data.DEF, null);
+        try {
+            player.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+            player.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
+            for (var instance : List.of(raw, power)) {
+                for (var modifier : List.copyOf(instance.getModifiers())) instance.removeModifier(modifier.getId());
+                instance.setBaseValue(1);
+            }
+            for (String mode : List.of("empty", "mainhand", "offhand")) {
+                var hand = mode.equals("empty") ? null : mode.equals("mainhand") ? EquipmentSlot.MAINHAND : EquipmentSlot.OFFHAND;
+                if (hand != null) {
+                    player.setItemSlot(hand, heldScroll);
+                    nativeModifiers.get(hand).forEach(raw::addTransientModifier);
+                }
+                try {
+                    var beforeModifiers = java.util.Set.copyOf(raw.getModifiers());
+                    double beforeValue = raw.getValue();
+                    var direct = values(minecraft, scroll, data, 0, CastSource.SCROLL);
+                    var oracle = new AttributeModifier(UUID.randomUUID(), "ui_probe_scroll_attribute_oracle", 0.28,
+                            AttributeModifier.Operation.ADDITION);
+                    Values expected;
+                    try {
+                        raw.addTransientModifier(oracle);
+                        expected = values(minecraft, book, slot.spellData(), 2, CastSource.SPELLBOOK);
+                    } finally {
+                        raw.removeModifier(oracle.getId());
+                    }
+                    check(expected.level == 15, "Magic Missile regression fixture did not reach effective level 15");
+                    check(!direct.unique.stream().map(Component::getString).toList().equals(expected.unique.stream().map(Component::getString).toList()),
+                            "Direct and inscribed scroll fixtures have indistinguishable native damage: " + mode);
+                    var graphics = new RecordingGraphics(minecraft);
+                    List<Component> lines = new ArrayList<>();
+                    try (var scope = SpellCastHooks.enter(outer)) {
+                        render.invoke(screen, graphics, 1f, -1000, -1000);
+                        checkInscription(graphics.text, spell, expected, false, "scroll attribute oracle " + mode);
+                        check(SpellCastHooks.get() == outer, "Attribute table preview leaked its surrounding context");
+                        scroll.getItem().appendHoverText(scroll, minecraft.level, lines, TooltipFlag.NORMAL);
+                        check(SpellCastHooks.get() == outer, "Attribute scroll tooltip leaked its surrounding context");
+                    }
+                    int heading = -1;
+                    int directLabels = 0;
+                    int inscribedLabels = 0;
+                    for (int index = 0; index < lines.size(); index++) {
+                        if (!(lines.get(index).getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents contents)) continue;
+                        if (contents.getKey().equals("tooltip.apotheosis_spells.scroll_direct")) directLabels++;
+                        if (contents.getKey().equals("tooltip.irons_spellbooks.scroll_tooltip")) {
+                            heading = index;
+                            inscribedLabels++;
+                        }
+                    }
+                    check(heading > 0 && directLabels == 1 && inscribedLabels == 1,
+                            "Attribute scroll tooltip did not retain exactly one direct and native inscribed heading: " + mode);
+                    String directText = lines.subList(0, heading).stream().map(Component::getString).collect(java.util.stream.Collectors.joining("\n"));
+                    String inscribedText = lines.subList(heading + 1, lines.size()).stream().map(Component::getString).collect(java.util.stream.Collectors.joining("\n"));
+                    for (var unique : direct.unique) contains(directText, unique.getString(), "scroll direct-use attribute preview " + mode);
+                    for (var unique : expected.unique) contains(inscribedText, unique.getString(), "scroll book-result attribute preview " + mode);
+                    check(expected.unique.stream().noneMatch(unique -> directText.contains(unique.getString()))
+                                    && direct.unique.stream().noneMatch(unique -> inscribedText.contains(unique.getString())),
+                            "Attribute scroll tooltip mixed direct and inscribed damage sections: " + mode);
+                    check(BookAttributeHandler.capture(scrollContext).isEmpty(), "Scroll preview changed execution attribute capture");
+                    check(Math.abs(raw.getValue() - beforeValue) < 0.000001
+                                    && beforeModifiers.equals(java.util.Set.copyOf(raw.getModifiers())),
+                            "Scroll/table preview modified native equipment attributes: " + mode);
+                    check(savedScroll.equals(scroll.getTag()) && savedHeld.equals(heldScroll.getTag()) && savedBook.equals(book.getTag())
+                                    && SpellCastHooks.get() == null,
+                            "Scroll/table preview changed NBT or leaked context: " + mode);
+                    ApotheosisSpells.LOGGER.info("UI_PROBE_SCROLL_ATTRIBUTE mode={} native_power={} book_result={}",
+                            mode, beforeValue, expected.unique.stream().map(Component::getString).toList());
+                } finally {
+                    if (hand != null) {
+                        nativeModifiers.get(hand).forEach(modifier -> raw.removeModifier(modifier.getId()));
+                        player.setItemSlot(hand, ItemStack.EMPTY);
+                    }
+                }
+            }
+            var scalarAffixes = affixData.copy();
+            scalarAffixes.getCompound("affixes").remove("apotheosis_spells:scroll/attribute/ender_spell_power");
+            var scalarScroll = ReforgeCache.createAffixedScroll(spell, 10, scalarAffixes);
+            var scalarExpected = values(minecraft, scalarScroll, ISpellContainer.get(scalarScroll).getSpellAtIndex(0), 0, CastSource.SCROLL);
+            var scalarLines = TooltipsUtils.formatScrollTooltip(scalarScroll, player);
+            check(scalarLines.stream().noneMatch(line -> line.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents contents
+                            && contents.getKey().equals("tooltip.apotheosis_spells.scroll_direct")),
+                    "A scroll without attribute bonuses changed its native single-value layout");
+            checkTooltip(scalarLines, spell, scalarExpected, false, true, "scroll without attribute bonuses");
+            for (var unique : scalarExpected.unique) check(scalarLines.stream().filter(line -> line.getString().strip().equals(unique.getString().strip())).count() == 1,
+                    "A scroll without attribute bonuses duplicated its native unique info");
+            check(SpellCastHooks.get() == null, "A scroll without attribute bonuses leaked its preview context");
+        } finally {
+            player.setItemSlot(EquipmentSlot.MAINHAND, mainhand);
+            player.setItemSlot(EquipmentSlot.OFFHAND, offhand);
+            raw.replaceFrom(original);
+            power.replaceFrom(originalPower);
+        }
+        check(raw.getBaseValue() == original.getBaseValue() && raw.getValue() == original.getValue()
+                        && java.util.Set.copyOf(raw.getModifiers()).equals(java.util.Set.copyOf(original.getModifiers()))
+                        && power.getBaseValue() == originalPower.getBaseValue() && power.getValue() == originalPower.getValue()
+                        && java.util.Set.copyOf(power.getModifiers()).equals(java.util.Set.copyOf(originalPower.getModifiers())),
+                "Scroll attribute regression fixture did not restore the original attribute maps");
+        check(player.getMainHandItem() == mainhand && player.getOffhandItem() == offhand,
+                "Scroll attribute regression fixture did not restore native equipment");
+        ApotheosisSpells.LOGGER.info("UI_PROBE_MATRIX scroll_attribute_book_results=3 native_equipment_sources=2");
+    }
+
     static void wheel(Minecraft minecraft) throws Exception {
         var previousScreen = minecraft.screen;
         ItemStack previousBook = Utils.getPlayerSpellbookStack(minecraft.player);
@@ -253,9 +407,11 @@ final class FullDisplayClientCases {
         double previousX = minecraft.mouseHandler.xpos();
         double previousY = minecraft.mouseHandler.ypos();
         boolean previousGrab = minecraft.mouseHandler.isMouseGrabbed();
+        boolean previousWindowActive = minecraft.isWindowActive();
         SpellWheelOverlay wheel = new SpellWheelOverlay();
         var outer = new SpellCastHooks.Context(ItemStack.EMPTY, minecraft.player, -1, 1, ReforgeCache.Data.DEF, null);
         int checked = 0;
+        int focusedCloses = 0;
         try {
             minecraft.screen = null;
             for (var spell : SpellRegistry.getEnabledSpells()) {
@@ -280,10 +436,12 @@ final class FullDisplayClientCases {
                         checked++;
                     }
                     int last = selection.getInt(wheel);
+                    minecraft.setWindowActive(true);
                     wheel.close();
                     check(!wheel.active && minecraft.mouseHandler.isMouseGrabbed(), "Native wheel close did not restore the mouse");
                     check(manager.getSelectionIndex() == last, "Native wheel close did not commit its rendered selection");
                     check(before.equals(book.getTag()), "Wheel rendering changed source NBT");
+                    focusedCloses++;
                 }
             }
             ItemStack book = book(SpellRegistry.FIREBALL_SPELL.get(), "combined");
@@ -302,6 +460,12 @@ final class FullDisplayClientCases {
                 }
                 check(failed && SpellCastHooks.get() == outer, "Failed real wheel frame did not restore its outer scope");
             }
+            int inactiveSelection = selection.getInt(wheel);
+            minecraft.setWindowActive(false);
+            wheel.close();
+            check(!wheel.active && !minecraft.mouseHandler.isMouseGrabbed(), "Native unfocused wheel close grabbed the mouse");
+            check(ClientMagicData.getSpellSelectionManager().getSelectionIndex() == inactiveSelection,
+                    "Native unfocused wheel close did not commit its rendered selection");
         } finally {
             if (wheel.active) wheel.close();
             managerField.set(null, previousManager);
@@ -309,9 +473,16 @@ final class FullDisplayClientCases {
             minecraft.screen = previousScreen;
             mouseX.setDouble(minecraft.mouseHandler, previousX);
             mouseY.setDouble(minecraft.mouseHandler, previousY);
-            if (previousGrab) minecraft.mouseHandler.grabMouse(); else minecraft.mouseHandler.releaseMouse();
+            try {
+                if (previousGrab) {
+                    minecraft.setWindowActive(true);
+                    minecraft.mouseHandler.grabMouse();
+                } else minecraft.mouseHandler.releaseMouse();
+            } finally {
+                minecraft.setWindowActive(previousWindowActive);
+            }
         }
-        ApotheosisSpells.LOGGER.info("UI_PROBE_MATRIX actual_wheel_frames={} cast_time=N/A_native_has_no_row", checked);
+        ApotheosisSpells.LOGGER.info("UI_PROBE_MATRIX actual_wheel_frames={} focused_closes={} unfocused_closes=1 cast_time=N/A_native_has_no_row", checked, focusedCloses);
     }
 
     static void inscription(Minecraft minecraft) throws Exception {

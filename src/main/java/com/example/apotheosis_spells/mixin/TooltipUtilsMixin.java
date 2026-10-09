@@ -88,9 +88,46 @@ public class TooltipUtilsMixin {
             ItemStack stack, Player player, Operation<List<net.minecraft.network.chat.Component>> original) {
         SpellCastHooks.Context context = apoth_context(stack, null, player);
         if (context == null) return original.call(stack, player);
+        List<net.minecraft.network.chat.Component> direct;
         try (var scope = SpellCastHooks.enter(context)) {
-            return original.call(stack, player);
+            direct = original.call(stack, player);
         }
+        List<net.minecraft.network.chat.Component> inscribed;
+        try (var scope = SpellCastHooks.enterInscribedScroll(context)) {
+            inscribed = original.call(stack, player);
+        }
+        int directHeading = apoth_inscribedHeading(direct);
+        int inscribedHeading = apoth_inscribedHeading(inscribed);
+        if (directHeading < 0 || inscribedHeading < 0) return direct;
+        var directDetails = apoth_scrollDetails(direct, directHeading);
+        var inscribedDetails = apoth_scrollDetails(inscribed, inscribedHeading);
+        if (directDetails.equals(inscribedDetails)) return inscribed;
+        var result = new java.util.ArrayList<net.minecraft.network.chat.Component>();
+        result.add(net.minecraft.network.chat.Component.translatable("tooltip.apotheosis_spells.scroll_direct")
+                .withStyle(net.minecraft.ChatFormatting.GRAY));
+        result.addAll(directDetails);
+        result.add(net.minecraft.network.chat.Component.empty());
+        result.add(inscribed.get(inscribedHeading));
+        result.addAll(inscribedDetails);
+        result.addAll(inscribed.subList(inscribedHeading + 1, inscribed.size()));
+        return result;
+    }
+
+    @Unique
+    private static int apoth_inscribedHeading(List<net.minecraft.network.chat.Component> lines) {
+        for (int index = 0; index < lines.size(); index++) {
+            if (lines.get(index).getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents contents
+                    && contents.getKey().equals("tooltip.irons_spellbooks.scroll_tooltip")) return index;
+        }
+        return -1;
+    }
+
+    @Unique
+    private static List<net.minecraft.network.chat.Component> apoth_scrollDetails(
+            List<net.minecraft.network.chat.Component> lines, int heading) {
+        int end = heading;
+        while (end > 0 && lines.get(end - 1).getString().isEmpty()) end--;
+        return lines.subList(0, end);
     }
 
     @WrapMethod(method = "formatActiveSpellTooltip")

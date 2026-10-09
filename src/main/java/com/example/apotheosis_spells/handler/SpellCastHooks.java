@@ -137,12 +137,17 @@ public final class SpellCastHooks {
         private boolean closed;
 
         private Scope(Context context, Snapshot snapshot) {
+            this(context, snapshot, null);
+        }
+
+        private Scope(Context context, Snapshot snapshot, java.util.List<AttributeBonus> previewBonuses) {
             previousContext = CURRENT.get();
             previousSnapshot = SNAPSHOT.get();
             previousPreview = PREVIEW.get();
             PreviewAttributes preview = snapshot == null && context != null && !context.castContext()
                     && context.caster() != null
-                    ? new PreviewAttributes(context.caster(), BookAttributeHandler.capture(context)) : null;
+                    ? new PreviewAttributes(context.caster(), previewBonuses == null
+                            ? BookAttributeHandler.capture(context) : previewBonuses) : null;
             setPreview(null);
             try {
                 attributes = snapshot != null && context != null
@@ -228,6 +233,10 @@ public final class SpellCastHooks {
     public static void set(Context context) { setCurrent(context, null); PREVIEW.remove(); }
     public static void clear() { setCurrent(null, null); PREVIEW.remove(); }
     public static Scope enter(Context context) { return new Scope(context, null); }
+
+    public static Scope enterInscribedScroll(Context context) {
+        return new Scope(context, null, BookAttributeHandler.captureInscribedScroll(context));
+    }
 
     public static Scope enter(Snapshot snapshot, Player player) {
         Context context = snapshot == null ? null : new Context(ItemStack.EMPTY, player, -1, snapshot.spellLevel(),

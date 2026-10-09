@@ -222,6 +222,126 @@ public class PreviewAttributeGameTests {
         }
     }
 
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void inscribedScrollPreviewMatchesBookWithoutChangingDirectCasting(GameTestHelper helper) throws Exception {
+        var player = player(helper, "[InscribedScrollPreview]");
+        var spell = io.redspace.ironsspellbooks.api.registry.SpellRegistry.getSpell("irons_spellbooks:magic_missile");
+        var affixes = TagParser.parseTag("""
+                {rarity:"apotheosis:ancient",sockets:1,
+                affixes:{"apotheosis_spells:scroll/spell_modifier/spell_level":1.0f,
+                "apotheosis_spells:scroll/spell_modifier/spell_power":1.0f,
+                "apotheosis_spells:scroll/attribute/ender_spell_power":1.0f},
+                gems:[{id:"apotheosis:gem",Count:1b,tag:{gem:"apotheosis_spells:arcane",
+                affix_data:{rarity:"apotheosis:ancient"}}}]}
+                """);
+        var scroll = ReforgeCache.createAffixedScroll(spell, 10, affixes);
+        var book = book();
+        var targetTag = book.getOrCreateTag().getCompound("irons_spellbooks:spell_container")
+                .getList("data", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(1);
+        targetTag.putString("id", spell.getSpellId());
+        targetTag.putInt("level", 10);
+        ReforgeCache.setBookAffix(book, 1, affixes);
+        Utils.setPlayerSpellbookStack(player, book);
+        var magic = MagicData.getPlayerMagicData(player);
+        magic.getSyncedData().setSpellSelection(new SpellSelection("spellbook", 0));
+        var power = AttributeRegistry.SPELL_POWER.get();
+        var ender = ForgeRegistries.ATTRIBUTES.getValue(ResourceLocation.parse("irons_spellbooks:ender_spell_power"));
+        var rawPower = player.getAttributes().getInstance(power);
+        var rawEnder = player.getAttributes().getInstance(ender);
+        var rawMana = player.getAttributes().getInstance(AttributeRegistry.MAX_MANA.get());
+        addOtherModifiers(rawPower);
+        rawEnder.addTransientModifier(new AttributeModifier(UUID.randomUUID(), "other school", 0.2,
+                AttributeModifier.Operation.MULTIPLY_TOTAL));
+        var hand = net.minecraft.world.entity.EquipmentSlot.MAINHAND;
+        var handModifiers = scroll.getAttributeModifiers(hand);
+        player.setItemSlot(hand, scroll);
+        player.getAttributes().addTransientAttributeModifiers(handModifiers);
+        double directPower = (rawPower.getBaseValue() + 0.1 + 0.4) * 1.25 * 1.5;
+        double directEnder = (rawEnder.getBaseValue() + 0.28) * 1.2;
+        helper.assertTrue(near(rawPower.getValue(), directPower) && near(rawEnder.getValue(), directEnder),
+                "The real held scroll did not supply its native affix and gem attributes");
+        BookAttributeHandler.refresh(player);
+        double selectedPower = rawPower.getValue();
+        double selectedMana = rawMana.getValue();
+        helper.assertTrue(near(selectedPower, (rawPower.getBaseValue() + 0.1 + 0.4 + 0.05) * 1.25 * 1.5)
+                        && near(selectedMana, rawMana.getBaseValue() + 120),
+                "The selected book fixture did not retain its independent gem bonuses");
+        var powerModifiers = java.util.Set.copyOf(rawPower.getModifiers());
+        var enderModifiers = java.util.Set.copyOf(rawEnder.getModifiers());
+        var manaModifiers = java.util.Set.copyOf(rawMana.getModifiers());
+        var dirty = java.util.Set.copyOf(player.getAttributes().getDirtyAttributes());
+        var scrollTag = scroll.getTag().copy();
+        var bookTag = book.getTag().copy();
+        magic.setMana(100);
+        float health = player.getHealth();
+        var scrollData = ISpellContainer.get(scroll).getSpellAtIndex(0);
+        var context = SpellCastHooks.buildContext(scroll, player, 0, scrollData.getLevel(), scrollData);
+        var target = ISpellContainer.get(book).getAllSpells()[1];
+        var bookContext = SpellCastHooks.buildContext(book, player, target.index(), target.getLevel(), target.spellData());
+        try {
+            helper.assertTrue(context.data().lvl() == 5 && context.data().dmg() == 1.5f,
+                    "The real scroll lost its level or spell-power reforge affixes");
+            try (var direct = SpellCastHooks.enter(context)) {
+                int directLevel = spell.getLevelFor(scrollData.getLevel(), player) + context.data().lvl();
+                var directInfo = spell.getUniqueInfo(directLevel, player).get(0).getString();
+                helper.assertTrue(directLevel == 15 && near(player.getAttributeValue(power), directPower)
+                                && near(player.getAttributeValue(ender), directEnder),
+                        "Direct scroll preview reapplied its held attributes or retained selected-book bonuses");
+                helper.assertTrue(BookAttributeHandler.capture(context).isEmpty()
+                                && SpellCastHooks.capture(player, spell, directLevel, context).attributes().isEmpty(),
+                        "Direct scroll casting captured attributes that native equipment already supplies");
+                try (var inscribed = SpellCastHooks.enterInscribedScroll(context)) {
+                    double inscribedPower = (rawPower.getBaseValue() + 0.1 + 0.4 + 0.4) * 1.25 * 1.5;
+                    double inscribedEnder = (rawEnder.getBaseValue() + 0.28 + 0.28) * 1.2;
+                    int inscribedLevel = spell.getLevelFor(scrollData.getLevel(), player) + context.data().lvl();
+                    var inscribedInfo = spell.getUniqueInfo(inscribedLevel, player).get(0).getString();
+                    helper.assertTrue(SpellCastHooks.get() == context && inscribedLevel == directLevel
+                                    && near(player.getAttributeValue(power), inscribedPower)
+                                    && near(player.getAttributeValue(ender), inscribedEnder)
+                                    && near(player.getAttributeValue(AttributeRegistry.MAX_MANA.get()), rawMana.getBaseValue()),
+                            "Inscribed scroll preview missed target affix/gem attributes or discarded real equipment");
+                    helper.assertTrue(!inscribedInfo.equals(directInfo)
+                                    && SpellCastHooks.capture(player, spell, inscribedLevel, context).attributes().isEmpty(),
+                            "Inscribed display did not remain distinct from direct scroll casting");
+                    try {
+                        try (var page = SpellCastHooks.enter(bookContext)) {
+                            int bookLevel = spell.getLevelFor(target.getLevel(), player) + bookContext.data().lvl();
+                            helper.assertTrue(bookLevel == inscribedLevel
+                                            && near(player.getAttributeValue(power), inscribedPower)
+                                            && near(player.getAttributeValue(ender), inscribedEnder)
+                                            && spell.getUniqueInfo(bookLevel, player).get(0).getString().equals(inscribedInfo),
+                                    "Inscribed scroll forecast disagreed with the corresponding real book page");
+                            throw new IllegalStateException("nested inscribed preview");
+                        }
+                    } catch (IllegalStateException expected) {
+                        helper.assertTrue(SpellCastHooks.get() == context
+                                        && near(player.getAttributeValue(power), inscribedPower)
+                                        && near(player.getAttributeValue(ender), inscribedEnder),
+                                "A failed book-page preview did not restore the outer inscribed-scroll forecast");
+                    }
+                }
+                helper.assertTrue(SpellCastHooks.get() == context && near(player.getAttributeValue(power), directPower)
+                                && near(player.getAttributeValue(ender), directEnder)
+                                && spell.getUniqueInfo(directLevel, player).get(0).getString().equals(directInfo),
+                        "Closing the inscribed forecast did not restore direct-scroll preview");
+            }
+            helper.assertTrue(SpellCastHooks.get() == null && SpellCastHooks.currentSnapshot() == null
+                            && player.getAttribute(power) == rawPower && player.getAttribute(ender) == rawEnder
+                            && near(rawPower.getValue(), selectedPower) && near(rawMana.getValue(), selectedMana)
+                            && rawPower.getModifiers().equals(powerModifiers) && rawEnder.getModifiers().equals(enderModifiers)
+                            && rawMana.getModifiers().equals(manaModifiers)
+                            && player.getAttributes().getDirtyAttributes().equals(dirty)
+                            && player.getHealth() == health && magic.getMana() == 100
+                            && scrollTag.equals(scroll.getTag()) && bookTag.equals(book.getTag()),
+                    "Scroll forecasts changed live attributes, gameplay state, synchronization, or stored affixes");
+            helper.succeed();
+        } finally {
+            BookAttributeHandler.onLogout(new net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent(player));
+            player.getAttributes().removeAttributeModifiers(handModifiers);
+            player.setItemSlot(hand, ItemStack.EMPTY);
+        }
+    }
+
     private static ServerPlayer player(GameTestHelper helper, String name) {
         return FakePlayerFactory.get(helper.getLevel(), new com.mojang.authlib.GameProfile(UUID.randomUUID(), name));
     }

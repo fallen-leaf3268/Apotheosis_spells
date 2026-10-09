@@ -102,10 +102,11 @@ public final class DisplayUiClientProbe {
         run("full_sparse_book_pages", () -> FullDisplayClientCases.pages(minecraft), failures);
         run("expanded_duplicate_book_details", () -> FullDisplayClientCases.expandedDuplicateBook(minecraft), failures);
         run("real_slot_attribute_previews", () -> FullDisplayClientCases.slotAttributes(minecraft), failures);
+        run("scroll_attribute_book_result_previews", () -> FullDisplayClientCases.scrollAttributePreviews(minecraft), failures);
         run("wheel_render_lifecycle", () -> FullDisplayClientCases.wheel(minecraft), failures);
         run("inscription_values_extraction", () -> FullDisplayClientCases.inscription(minecraft), failures);
         run("siphoning_geometry_metadata_occlusion", () -> FullDisplayClientCases.siphoning(minecraft), failures);
-        if (failures.isEmpty()) ApotheosisSpells.LOGGER.info("UI_PROBE_PASS cases=10");
+        if (failures.isEmpty()) ApotheosisSpells.LOGGER.info("UI_PROBE_PASS cases=11");
         else ApotheosisSpells.LOGGER.error("UI_PROBE_FAIL cases=" + failures.size());
         minecraft.stop();
     }

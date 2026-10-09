@@ -118,6 +118,7 @@
   "affix.apotheosis_spells:scroll/attribute/nature_spell_power.suffix": "之藤",
   "affix.apotheosis_spells:scroll/attribute/eldritch_spell_power": "秘奥",
   "affix.apotheosis_spells:scroll/attribute/eldritch_spell_power.suffix": "之渊",
+  "tooltip.apotheosis_spells.scroll_direct": "直接使用（当前装备）：",
   "gem_class.scroll_caster": "法术卷轴",
   "gem_class.scroll_spell": "法术强化"
 }
